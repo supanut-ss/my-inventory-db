@@ -1,8 +1,10 @@
 -- Created by GitHub Copilot in SSMS - review carefully before executing
 /*
     Summary:
-    This stored procedure [inv].[usp_count_reconcile] is designed to reconcile inventory count details and update or insert records into both [t_inv_count_detail] and [t_inv_count_reconcile] tables. 
-    It performs validation, handles error messaging via resource lookup, and logs process results. The procedure supports multi-language error messages and ensures transactional integrity.
+    This stored procedure [inv].[usp_count_reconcile] is designed to reconcile inventory count details
+    and update or insert records into both [t_inv_count_detail] and [t_inv_count_reconcile] tables.
+    It performs validation, handles error messaging via resource lookup, and logs process results.
+    The procedure supports multi-language error messages and ensures transactional integrity.
 */
 
 CREATE OR ALTER PROCEDURE [inv].[usp_count_reconcile]
@@ -15,7 +17,7 @@ CREATE OR ALTER PROCEDURE [inv].[usp_count_reconcile]
     @in_vch_lot_number         NVARCHAR(50)  = NULL,
     @in_dat_expiry_date        DATE          = NULL,
     @in_vch_serial_number      NVARCHAR(50)  = NULL,
-    @in_vch_lang               VARCHAR(20),             
+    @in_vch_lang               VARCHAR(20),
     @in_vch_user_id            NVARCHAR(50),
     @in_vch_device             NVARCHAR(50)  = NULL,
     @out_vch_error_code        VARCHAR(50)   OUTPUT,
@@ -58,7 +60,7 @@ BEGIN
         WHERE count_master_id = @in_int_count_master_id;
 
         -- Retrieve location name
-        SELECT 
+        SELECT
             @v_vch_location = location
         FROM [inv].[t_inv_location]
         WHERE location_id = @in_int_location_id;
@@ -71,15 +73,16 @@ BEGIN
         WHERE item_master_id = @in_int_item_master_id;
 
         -- Retrieve UOM information
-        SELECT 
+        SELECT
             @v_vch_uom = uom
         FROM [inv].[t_inv_item_uom]
         WHERE item_uom_id = @in_int_item_uom_id;
 
-        -- Convert expiry date to string for comparison
+        -- แปลง expiry date เป็น string format ISO (yyyy-mm-dd) สำหรับเก็บใน count_detail
+        -- ใช้ format 23 เพื่อให้ตรงกับ column type ใน t_inv_count_detail ที่เก็บเป็น NVARCHAR
         SET @v_vch_expiry_date_str = CONVERT(NVARCHAR(50), @in_dat_expiry_date, 23);
 
-        -- Validate input and set error code
+        -- Validation: ตรวจสอบเงื่อนไขทั้งหมดก่อนดำเนินการ
         SELECT @v_vch_error_code = CASE
             WHEN @v_int_warehouse_id IS NULL THEN 'ERR_COUNT_MASTER_NOT_FOUND'
             WHEN @v_vch_close_by IS NOT NULL THEN 'ERR_COUNT_ALREADY_CLOSED'
@@ -90,7 +93,7 @@ BEGIN
             ELSE 'SUCCESS'
         END;
 
-        -- If validation fails, set error output and raise error
+        -- หาก Validation ไม่ผ่าน ให้ set error output และ raise error
         IF @v_vch_error_code <> 'SUCCESS'
         BEGIN
             SET @out_vch_error_code    = @v_vch_error_code;
@@ -103,7 +106,8 @@ BEGIN
             RAISERROR(@out_vch_error_message, 16, 1);
         END
 
-        -- Check for existing count detail line
+        -- ตรวจหา count detail line ที่มีอยู่แล้ว
+        -- หมายเหตุ: expiry_date ใน t_inv_count_detail เก็บเป็น NVARCHAR จึงเปรียบเทียบด้วย string
         SELECT
             @v_int_count_detail_id = count_detail_id,
             @v_dec_quantity_stock  = quantity_stock,
@@ -112,16 +116,17 @@ BEGIN
         WHERE count_master_id  = @in_int_count_master_id
             AND location_id    = @in_int_location_id
             AND item_master_id = @in_int_item_master_id
-            AND ISNULL(inv_status,    '') = ISNULL(@in_vch_inv_status,    '')
-            AND ISNULL(lot_number,    '') = ISNULL(@in_vch_lot_number,    '')
-            AND ISNULL(expiry_date,   '') = ISNULL(@v_vch_expiry_date_str,'')
-            AND ISNULL(serial_number, '') = ISNULL(@in_vch_serial_number, '');
+            AND ISNULL(inv_status,    '') = ISNULL(@in_vch_inv_status,     '')
+            AND ISNULL(lot_number,    '') = ISNULL(@in_vch_lot_number,     '')
+            AND ISNULL(expiry_date,   '') = ISNULL(@v_vch_expiry_date_str, '')
+            AND ISNULL(serial_number, '') = ISNULL(@in_vch_serial_number,  '');
 
-        -- If detail exists, update it; otherwise, insert new detail
+        -- Upsert count_detail: ถ้ามีอยู่แล้วให้ update จำนวน / ถ้าไม่มีให้ insert ใหม่
         IF @v_int_count_detail_id IS NOT NULL
         BEGIN
+            -- อัปเดตจำนวนนับและข้อมูล audit trail
             UPDATE [inv].[t_inv_count_detail]
-            SET 
+            SET
                 quantity_count = @in_dec_quantity_count,
                 count_by       = @in_vch_user_id,
                 count_date     = GETDATE(),
@@ -131,7 +136,8 @@ BEGIN
         END
         ELSE
         BEGIN
-            -- Retrieve stock quantity from inventory
+            -- ดึงจำนวน stock ปัจจุบันจาก inventory เพื่อเปรียบเทียบกับจำนวนที่นับได้
+            -- หมายเหตุ: ใน t_inv_inventory ใช้ DATE type จึงเปรียบเทียบด้วย DATE โดยตรง
             SELECT @v_dec_quantity_stock = ISNULL(quantity, 0)
             FROM [inv].[t_inv_inventory]
             WHERE warehouse_id     = @v_int_warehouse_id
@@ -144,7 +150,7 @@ BEGIN
 
             SET @v_dat_receive_date = CAST(GETDATE() AS DATE);
 
-            -- Generate new count_detail_id from sequence
+            -- Generate new count_detail_id จาก sequence
             SET @v_int_count_detail_id = NEXT VALUE FOR [inv].[SEQCountID];
 
             INSERT INTO [inv].[t_inv_count_detail] (
@@ -193,21 +199,21 @@ BEGIN
             );
         END
 
-        -- Upsert into count_reconcile table
+        -- Upsert count_reconcile: ตารางสรุปผลการ reconcile (ใช้ควบคู่กับ count_detail)
         SELECT @v_int_count_reconcile_id = count_reconcile_id
         FROM [inv].[t_inv_count_reconcile]
         WHERE count_master_id  = @in_int_count_master_id
             AND location_id    = @in_int_location_id
             AND item_master_id = @in_int_item_master_id
-            AND ISNULL(inv_status,    '') = ISNULL(@in_vch_inv_status,    '')
-            AND ISNULL(lot_number,    '') = ISNULL(@in_vch_lot_number,    '')
-            AND ISNULL(expiry_date,   '') = ISNULL(@v_vch_expiry_date_str,'')
-            AND ISNULL(serial_number, '') = ISNULL(@in_vch_serial_number, '');
+            AND ISNULL(inv_status,    '') = ISNULL(@in_vch_inv_status,     '')
+            AND ISNULL(lot_number,    '') = ISNULL(@in_vch_lot_number,     '')
+            AND ISNULL(expiry_date,   '') = ISNULL(@v_vch_expiry_date_str, '')
+            AND ISNULL(serial_number, '') = ISNULL(@in_vch_serial_number,  '');
 
         IF @v_int_count_reconcile_id IS NOT NULL
         BEGIN
             UPDATE [inv].[t_inv_count_reconcile]
-            SET 
+            SET
                 quantity_count = @in_dec_quantity_count,
                 update_by      = @in_vch_user_id,
                 update_date    = GETDATE()
@@ -253,7 +259,7 @@ BEGIN
             );
         END
 
-        -- Commit transaction and set success output
+        -- Commit transaction และ set success output
         COMMIT TRANSACTION;
         SET @out_vch_error_code    = '0';
         SET @out_vch_error_message = [sec].usf_get_resouce_value(
@@ -265,15 +271,15 @@ BEGIN
 
     END TRY
     BEGIN CATCH
-        -- Rollback transaction and log error if any exception occurs
+        -- Rollback transaction และ log error เมื่อเกิด exception
         IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
         SET @out_vch_error_code    = ISNULL(@out_vch_error_code, 'ERR_999');
         SET @out_vch_error_message = ERROR_MESSAGE();
 
         EXEC [inv].[usp_process_log]
-             @in_vch_log_type        = 'STORE_PROCEDURE',
+             @in_vch_log_type        = 'STORED_PROCEDURE',   -- แก้จาก 'STORE_PROCEDURE'
              @in_vch_device          = @in_vch_device,
-             @in_vch_process         = 'usp_inventory_count',
+             @in_vch_process         = 'usp_count_reconcile', -- แก้ให้ตรงกับชื่อ SP จริง
              @in_dt_process_datetime = @v_dt_process_start,
              @out_vch_error_code     = @out_vch_error_code,
              @out_vch_error_message  = @out_vch_error_message,
