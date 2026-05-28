@@ -7,7 +7,7 @@ SET QUOTED_IDENTIFIER ON
 GO
 
 ALTER PROCEDURE [inv].[usp_inventory_adjustment]
-    @in_int_inventory_id    BIGINT,
+    @in_int_inventory_id    BIGINT = NULL,
     @in_vch_adj_type        VARCHAR(10),
     @in_dec_qty             DECIMAL(18, 4),
     @in_vch_lot_number      NVARCHAR(50)  = NULL,
@@ -48,6 +48,19 @@ BEGIN
 
     BEGIN TRY
         BEGIN TRANSACTION;
+
+        -- If inventory_id is NULL, try to find it from other parameters
+        IF @in_int_inventory_id IS NULL
+        BEGIN
+            SELECT TOP 1 @in_int_inventory_id = inventory_id
+            FROM [inv].[t_inv_inventory]
+            WHERE item_number   = @v_vch_item_number
+              AND location_id   = @v_int_location_id
+              AND ISNULL(lot_number, '') = ISNULL(@in_vch_lot_number, '')
+              AND ISNULL(expiry_date, '1900-01-01') = ISNULL(@in_dat_expiry_date, '1900-01-01')
+              AND ISNULL(inv_status, '') = ISNULL(@v_vch_inv_status, '')
+            ORDER BY inventory_id ASC;
+        END
 
         -- Gather inventory data
         SELECT
