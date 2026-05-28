@@ -1,5 +1,5 @@
 -- Created by GitHub Copilot in SSMS - review carefully before executing
-ALTER PROCEDURE [inv].[usp_inventory_count]
+CREATE OR ALTER PROCEDURE [inv].[usp_count_reconcile]
     @in_int_count_master_id  BIGINT,
     @in_int_location_id      INT,
     @in_int_item_master_id   INT,
