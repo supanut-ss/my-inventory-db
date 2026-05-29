@@ -77,7 +77,7 @@ BEGIN
             @v_vch_warehouse    = warehouse
         FROM [inv].[t_inv_warehouse]
         WHERE is_active = 1
-        ORDER BY create_date ASC;
+        ORDER BY warehouse_id ASC;
 
         IF @v_int_warehouse_id IS NULL
         BEGIN
@@ -97,7 +97,7 @@ BEGIN
             @v_vch_owner_code = owner_code
         FROM [inv].[t_inv_owner]
         WHERE is_active = 1
-        ORDER BY create_date ASC;
+        ORDER BY owner_id ASC;
 
         IF @v_int_owner_id IS NULL
         BEGIN
@@ -415,7 +415,7 @@ BEGIN
             AND target.location_id                       = source.location_id
             AND target.item_master_id                    = source.item_master_id
             AND ISNULL(target.lot_number,  '')           = ISNULL(source.lot_number,  '')
-            AND ISNULL(target.expiry_date, '1900-01-01') = ISNULL(source.expiry_date, '1900-01-01')
+            AND ISNULL(target.expiry_date, '') = ISNULL(source.expiry_date, '')
             AND ISNULL(target.inv_status,  '')           = ISNULL(source.inv_status,  '')
         WHEN MATCHED THEN
             UPDATE SET
@@ -469,7 +469,7 @@ BEGIN
               AND inv.location_id      = @in_int_receipt_location_id
               AND inv.item_master_id   = @in_int_item_master_id
               AND ISNULL(inv.lot_number,  '')           = ISNULL(@in_vch_lot_number,  '')
-              AND ISNULL(inv.expiry_date, '1900-01-01') = ISNULL(@in_dat_expiry_date, '1900-01-01');
+              AND ISNULL(inv.expiry_date, '') = ISNULL(@in_dat_expiry_date, '');
 
             IF @v_int_inventory_id IS NULL
             BEGIN

@@ -56,12 +56,17 @@ BEGIN
         ,@out_vch_location      = @out_vch_location     OUTPUT;
 
     -- Guard: แจ้งเตือนถ้าหา location ไม่ได้ (ไม่ raise error เพราะ caller ยังเลือก location เองได้)
-    IF @out_int_location_id IS NULL
-    BEGIN
-        SET @out_vch_error_code    = 'WARN_NO_SUGGEST_LOCATION';
-        SET @out_vch_error_message = [sec].usf_get_resouce_value('STORED_PROCEDURE',@out_vch_error_code,@in_vch_lang,'@param1','@param2','@param3','@param4','@param5');
-        -- ไม่ RETURN เพื่อให้ยังส่ง result sets กลับไปให้ client เลือก location เองได้
-    END
+    --IF @out_int_location_id IS NULL
+    --BEGIN
+    --    SET @out_vch_error_code    = 'WARN_NO_SUGGEST_LOCATION';
+    --    SET @out_vch_error_message = [sec].usf_get_resouce_value('STORED_PROCEDURE',@out_vch_error_code,@in_vch_lang,'@param1','@param2','@param3','@param4','@param5');
+    --    -- ไม่ RETURN เพื่อให้ยังส่ง result sets กลับไปให้ client เลือก location เองได้
+    --END
+
+    -- Sequence Result
+    -- 1.Item
+    -- 2.Location
+    -- 3.UOM
 
     -- Result Set 1: ข้อมูล item (controls สำหรับ UI validation)
     SELECT

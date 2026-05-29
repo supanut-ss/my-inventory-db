@@ -78,6 +78,12 @@ BEGIN
         @v_vch_uom                      NVARCHAR(10),
         -- Inventory Detail
         @v_dec_current_qty              DECIMAL(18, 4),
+        @v_dec_available_qty            DECIMAL(18, 4),
+        @v_dec_remaining_qty            DECIMAL(18, 4),
+        @v_dec_adjust_qty               DECIMAL(18, 4),
+        @v_int_current_inventory_id     BIGINT,
+        @v_dec_current_row_qty          DECIMAL(18, 4),
+        @v_dat_current_receive_date     DATE,
         @v_vch_inv_status               NVARCHAR(50)  = 'Available',
         @v_dat_receive_date             DATE,
         -- Item Control Flags
@@ -104,7 +110,7 @@ BEGIN
                 @v_vch_warehouse    = warehouse
             FROM [inv].[t_inv_warehouse]
             WHERE is_active = 1
-            ORDER BY create_date ASC;
+            ORDER BY warehouse_id ASC;
 
             -- หา default owner (active, เก่าสุด)
             SELECT TOP 1
@@ -112,7 +118,7 @@ BEGIN
                 @v_vch_owner_code = owner_code
             FROM [inv].[t_inv_owner]
             WHERE is_active = 1
-            ORDER BY create_date ASC;
+            ORDER BY owner_id ASC;
 
             -- ค้นหา inventory_id จาก key ที่รับมา
             SELECT TOP 1
@@ -121,9 +127,11 @@ BEGIN
             WHERE item_number                           = ISNULL(@in_vch_item_number, item_number)
               AND location                              = ISNULL(@in_vch_location, location)
               AND ISNULL(lot_number,   '')              = ISNULL(@in_vch_lot_number,    '')
-              AND ISNULL(expiry_date,  '1900-01-01')    = ISNULL(@in_dat_expiry_date,   '1900-01-01')
+              AND ISNULL(expiry_date,  '')              = ISNULL(@in_dat_expiry_date,   '')
               AND ISNULL(inv_status,   '')              = ISNULL(@v_vch_inv_status,     '')
-            ORDER BY inventory_id ASC;
+            ORDER BY
+                receive_date ASC,
+                inventory_id ASC;
         END
 
         -- ============================================================
@@ -175,6 +183,34 @@ BEGIN
         WHERE iuom.item_master_id = @v_int_item_master_id
           AND iuom.primary_uom    = 1;
 
+        IF @in_vch_adj_type = 'ADJUST_OUT'
+        BEGIN
+            SELECT
+                @v_dec_available_qty = ISNULL(SUM(inv.quantity), 0)
+            FROM [inv].[t_inv_inventory] inv
+            WHERE inv.warehouse_id    = @v_int_warehouse_id
+              AND inv.owner_id        = @v_int_owner_id
+              AND inv.location_id     = @v_int_location_id
+              AND inv.item_master_id  = @v_int_item_master_id
+              AND ISNULL(inv.inv_status,  '')           = ISNULL(@v_vch_inv_status,  '')
+              AND ISNULL(inv.lot_number,  '')           = ISNULL(@in_vch_lot_number, '')
+              AND ISNULL(inv.expiry_date, '')           = ISNULL(@in_dat_expiry_date, '')
+              AND (
+                    @v_vch_sn_control <> 'FULL'
+                    OR @in_vch_serial_number IS NULL
+                    OR EXISTS (
+                        SELECT 1
+                        FROM [inv].[t_inv_inventory_serial] invs
+                        WHERE invs.inventory_id  = inv.inventory_id
+                          AND invs.serial_number = @in_vch_serial_number
+                    )
+                  );
+        END
+        ELSE
+        BEGIN
+            SET @v_dec_available_qty = @v_dec_current_qty;
+        END
+
         -- ============================================================
         -- STEP 2: Validation
         -- ============================================================
@@ -185,7 +221,7 @@ BEGIN
                 THEN 'ERR_INVALID_ADJ_TYPE'                 -- adj_type ไม่ถูกต้อง
             WHEN @in_dec_qty <= 0
                 THEN 'ERR_INVALID_QTY'                      -- จำนวนต้องมากกว่า 0
-            WHEN @in_vch_adj_type = 'ADJUST_OUT' AND @in_dec_qty > @v_dec_current_qty
+            WHEN @in_vch_adj_type = 'ADJUST_OUT' AND @in_dec_qty > ISNULL(@v_dec_available_qty, 0)
                 THEN 'ERR_QTY_EXCEEDS_AVAILABLE'            -- ADJUST_OUT เกิน qty คงเหลือ
             WHEN @v_vch_lot_control = 'FULL' AND ISNULL(@in_vch_lot_number, '') = ''
                 THEN 'ERR_LOT_REQUIRED'                     -- item ต้องการ lot แต่ไม่ได้ส่งมา
@@ -218,14 +254,21 @@ BEGIN
                 SET @v_vch_error_code = 'ERR_SERIAL_DUPLICATE';  -- Serial นี้มีในระบบแล้ว
         END
 
-        -- ตรวจ serial มีอยู่จริงสำหรับ ADJUST_OUT (serial ต้องมีอยู่ใน inventory นั้น)
         IF @v_vch_sn_control = 'FULL'
             AND @in_vch_adj_type = 'ADJUST_OUT'
             AND @v_vch_error_code = 'SUCCESS'
         BEGIN
             SELECT @v_int_serial_exists = COUNT(*)
             FROM [inv].[t_inv_inventory_serial] invs
-            WHERE invs.inventory_id  = @in_int_inventory_id
+            INNER JOIN [inv].[t_inv_inventory] inv
+                ON inv.inventory_id = invs.inventory_id
+            WHERE inv.warehouse_id    = @v_int_warehouse_id
+              AND inv.owner_id        = @v_int_owner_id
+              AND inv.location_id     = @v_int_location_id
+              AND inv.item_master_id  = @v_int_item_master_id
+              AND ISNULL(inv.inv_status,  '')           = ISNULL(@v_vch_inv_status,  '')
+              AND ISNULL(inv.lot_number,  '')           = ISNULL(@in_vch_lot_number, '')
+              AND ISNULL(inv.expiry_date, '')           = ISNULL(@in_dat_expiry_date, '')
               AND invs.serial_number = @in_vch_serial_number;
 
             IF @v_int_serial_exists = 0
@@ -243,30 +286,98 @@ BEGIN
         -- ============================================================
         -- STEP 3: ปรับยอด Inventory
         -- ============================================================
-        UPDATE [inv].[t_inv_inventory]
-        SET quantity    = CASE @in_vch_adj_type
-                            WHEN 'ADJUST_IN'  THEN quantity + @in_dec_qty
-                            WHEN 'ADJUST_OUT' THEN quantity - @in_dec_qty
-                          END,
-            update_by   = @in_vch_user_id,
-            update_date = GETDATE()
-        WHERE inventory_id = @in_int_inventory_id;
-
-        -- ถ้า qty เหลือ 0 จาก ADJUST_OUT → ลบ serial และ inventory row
-        IF @in_vch_adj_type = 'ADJUST_OUT'
-            AND (@v_dec_current_qty - @in_dec_qty) = 0
+        IF @in_vch_adj_type = 'ADJUST_IN'
         BEGIN
-            DELETE FROM [inv].[t_inv_inventory_serial]
+            UPDATE [inv].[t_inv_inventory]
+            SET quantity    = quantity + @in_dec_qty,
+                update_by   = @in_vch_user_id,
+                update_date = GETDATE()
             WHERE inventory_id = @in_int_inventory_id;
+        END
+        ELSE
+        BEGIN
+            SET @v_dat_receive_date  = NULL;
+            SET @v_dec_remaining_qty = @in_dec_qty;
 
-            DELETE FROM [inv].[t_inv_inventory]
-            WHERE inventory_id = @in_int_inventory_id;
+            WHILE @v_dec_remaining_qty > 0
+            BEGIN
+                SET @v_int_current_inventory_id = NULL;
+
+                SELECT TOP 1
+                    @v_int_current_inventory_id = inv.inventory_id,
+                    @v_dec_current_row_qty      = inv.quantity,
+                    @v_dat_current_receive_date = inv.receive_date
+                FROM [inv].[t_inv_inventory] inv
+                WHERE inv.warehouse_id    = @v_int_warehouse_id
+                  AND inv.owner_id        = @v_int_owner_id
+                  AND inv.location_id     = @v_int_location_id
+                  AND inv.item_master_id  = @v_int_item_master_id
+                  AND inv.quantity        > 0
+                  AND ISNULL(inv.inv_status,  '')           = ISNULL(@v_vch_inv_status,  '')
+                  AND ISNULL(inv.lot_number,  '')           = ISNULL(@in_vch_lot_number, '')
+                  AND ISNULL(inv.expiry_date, '')           = ISNULL(@in_dat_expiry_date, '')
+                  AND (
+                        @v_vch_sn_control <> 'FULL'
+                        OR @in_vch_serial_number IS NULL
+                        OR EXISTS (
+                            SELECT 1
+                            FROM [inv].[t_inv_inventory_serial] invs
+                            WHERE invs.inventory_id  = inv.inventory_id
+                              AND invs.serial_number = @in_vch_serial_number
+                        )
+                      )
+                ORDER BY
+                    inv.receive_date ASC,
+                    inv.inventory_id ASC;
+
+                IF @v_int_current_inventory_id IS NULL
+                BEGIN
+                    SET @v_vch_error_code = 'ERR_QTY_EXCEEDS_AVAILABLE';
+                    SET @out_vch_error_code    = @v_vch_error_code;
+                    SET @out_vch_error_message = [sec].usf_get_resouce_value('STORED_PROCEDURE', @out_vch_error_code, @in_vch_lang, '@param1', '@param2', '@param3', '@param4', '@param5');
+                    RAISERROR(@out_vch_error_message, 16, 1);
+                END
+
+                SET @v_dec_adjust_qty = CASE
+                    WHEN @v_dec_current_row_qty >= @v_dec_remaining_qty
+                        THEN @v_dec_remaining_qty
+                    ELSE @v_dec_current_row_qty
+                END;
+
+                UPDATE [inv].[t_inv_inventory]
+                SET quantity    = quantity - @v_dec_adjust_qty,
+                    update_by   = @in_vch_user_id,
+                    update_date = GETDATE()
+                WHERE inventory_id = @v_int_current_inventory_id;
+
+                IF @v_vch_sn_control = 'FULL'
+                BEGIN
+                    DELETE FROM [inv].[t_inv_inventory_serial]
+                    WHERE inventory_id  = @v_int_current_inventory_id
+                      AND serial_number = @in_vch_serial_number;
+                END
+
+                IF (@v_dec_current_row_qty - @v_dec_adjust_qty) = 0
+                BEGIN
+                    DELETE FROM [inv].[t_inv_inventory_serial]
+                    WHERE inventory_id = @v_int_current_inventory_id;
+
+                    DELETE FROM [inv].[t_inv_inventory]
+                    WHERE inventory_id = @v_int_current_inventory_id;
+                END
+
+                IF @v_dat_receive_date IS NULL
+                    SET @v_dat_receive_date = @v_dat_current_receive_date;
+
+                SET @v_dec_remaining_qty = @v_dec_remaining_qty - @v_dec_adjust_qty;
+            END
         END
 
         -- ============================================================
         -- STEP 4: จัดการ Serial
         -- ============================================================
         IF @v_vch_sn_control = 'FULL'
+            AND @in_vch_adj_type = 'ADJUST_IN'
         BEGIN
             IF @in_vch_adj_type = 'ADJUST_IN'
             BEGIN
@@ -283,14 +394,6 @@ BEGIN
                     @in_vch_user_id,
                     GETDATE()
                 );
-            END
-            ELSE IF @in_vch_adj_type = 'ADJUST_OUT'
-                AND (@v_dec_current_qty - @in_dec_qty) > 0
-            BEGIN
-                -- ลบ serial ออกจากระบบ (เฉพาะกรณียัง qty เหลืออยู่ หากเป็น 0 ถูกลบแล้วใน STEP 3)
-                DELETE FROM [inv].[t_inv_inventory_serial]
-                WHERE inventory_id  = @in_int_inventory_id
-                  AND serial_number = @in_vch_serial_number;
             END
         END
 
@@ -332,12 +435,13 @@ BEGIN
             serial_number,
             device,
             create_by,
-            create_date
+            create_date,
+            remark
         )
         VALUES (
             'ADJUSTMENT',
             @in_vch_adj_type,
-            @in_vch_reason,
+            'Inventory adjustment',
             @v_int_warehouse_id,
             @v_vch_warehouse,
             @v_int_owner_id,
@@ -366,7 +470,8 @@ BEGIN
             @in_vch_serial_number,
             @in_vch_device,
             @in_vch_user_id,
-            GETDATE()
+            GETDATE(),
+            @in_vch_reason
         );
 
         COMMIT TRANSACTION;

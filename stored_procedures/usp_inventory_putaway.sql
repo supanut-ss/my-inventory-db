@@ -102,7 +102,7 @@ BEGIN
                 @v_vch_warehouse    = warehouse
             FROM [inv].[t_inv_warehouse]
             WHERE is_active = 1
-            ORDER BY create_date ASC;
+            ORDER BY warehouse_id ASC;
 
             -- หา default owner (active, เก่าสุด)
             SELECT TOP 1
@@ -110,7 +110,7 @@ BEGIN
                 @v_vch_owner_code = owner_code
             FROM [inv].[t_inv_owner]
             WHERE is_active = 1
-            ORDER BY create_date ASC;
+            ORDER BY owner_id ASC;
 
             -- ค้นหา inventory_id จาก key ที่รับมา
             SELECT TOP 1
@@ -119,7 +119,7 @@ BEGIN
             WHERE item_number                           = ISNULL(@in_vch_item_number, item_number)
               AND location                              = ISNULL(@in_vch_location, location)
               AND ISNULL(lot_number,   '')              = ISNULL(@in_vch_lot_number,    '')
-              AND ISNULL(expiry_date,  '1900-01-01')    = ISNULL(@in_dat_expiry_date,   '1900-01-01')
+              AND ISNULL(expiry_date,  '')              = ISNULL(@in_dat_expiry_date,   '')
               AND ISNULL(inv_status,   '')              = ISNULL(@v_vch_inv_status,     '')
             ORDER BY inventory_id ASC;
         END
@@ -240,8 +240,8 @@ BEGIN
             AND target.item_master_id                    = source.item_master_id
             AND ISNULL(target.inv_status,   '')          = ISNULL(source.inv_status,   '')
             AND ISNULL(target.lot_number,   '')          = ISNULL(source.lot_number,   '')
-            AND ISNULL(target.expiry_date,  '1900-01-01') = ISNULL(source.expiry_date,  '1900-01-01')
-            AND ISNULL(target.receive_date, '1900-01-01') = ISNULL(source.receive_date, '1900-01-01')
+            AND ISNULL(target.expiry_date,  '')          = ISNULL(source.expiry_date,  '')
+            AND ISNULL(target.receive_date, '')          = ISNULL(source.receive_date, '')
         WHEN MATCHED THEN
             UPDATE SET
                 quantity    = ISNULL(target.quantity, 0) + @in_dec_qty,
@@ -303,8 +303,8 @@ BEGIN
               AND inv.item_master_id                       = @v_int_item_master_id
               AND ISNULL(inv.inv_status,   '')             = ISNULL(@v_vch_inv_status,   '')
               AND ISNULL(inv.lot_number,   '')             = ISNULL(@v_vch_lot_number,   '')
-              AND ISNULL(inv.expiry_date,  '1900-01-01')   = ISNULL(@v_dat_expiry_date,  '1900-01-01')
-              AND ISNULL(inv.receive_date, '1900-01-01')   = ISNULL(@v_dat_receive_date, '1900-01-01');
+              AND ISNULL(inv.expiry_date,  '')             = ISNULL(@v_dat_expiry_date,  '')
+              AND ISNULL(inv.receive_date, '')             = ISNULL(@v_dat_receive_date, '');
 
             -- Reassign serial: ชี้ inventory_id จาก source → target
             -- ถ้าระบุ serial เฉพาะตัว → ย้ายแค่ตัวนั้น

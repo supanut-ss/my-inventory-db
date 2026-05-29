@@ -153,7 +153,7 @@ BEGIN
                 AND item_master_id = @in_int_item_master_id
             AND ISNULL(inv_status,  '') = ISNULL(@in_vch_inv_status, '')
             AND ISNULL(lot_number,  '') = ISNULL(@in_vch_lot_number, '')
-            AND ISNULL(expiry_date, '1900-01-01') = ISNULL(@in_dat_expiry_date, '1900-01-01');
+            AND ISNULL(expiry_date, '') = ISNULL(@in_dat_expiry_date, '');
 
             SET @v_dat_receive_date = CAST(GETDATE() AS DATE);
 
