@@ -111,8 +111,15 @@ BEGIN
             RAISERROR(@out_vch_error_message, 16, 1);
         END
 
-        -- Hardcode order_type สำหรับ Blind Receipt (ไม่ดึงจาก combobox)
-        SET @v_vch_order_type = 'BLIND RECEIPT';
+        -- Select order_type สำหรับ Blind Receipt (ไม่ดึงจาก combobox)
+       
+        SELECT @v_vch_order_type = VALUE FROM [inv].[t_inv_rule] 
+        WHERE rule_code = 'ORDER_TYPE_FOR_BLIND_RECEIPT' 
+        AND is_active = 1
+        IF(ISNULL(@v_vch_order_type,'') ='')
+        BEGIN
+            SET @v_vch_order_type = 'Blind Receipt';
+        END
 
         -- Default inv_status ถ้าไม่ส่งมา
         SET @v_vch_inv_status = ISNULL(@in_vch_inv_status, 'Available');
