@@ -1,11 +1,14 @@
 USE [MyInventory]
 GO
-/****** Object:  StoredProcedure [inv].[usp_inv_suggest_putaway_location]    Script Date: 26/05/2026 10:29:54 ******/
+
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 
+-- ============================================================
+-- Object  : [inv].[usp_inv_suggest_putaway_location]
+-- ============================================================
 CREATE OR ALTER PROCEDURE [inv].[usp_inv_suggest_putaway_location]
     @in_int_item_master_id  INT,
     @out_int_location_id    INT           OUTPUT,
@@ -42,7 +45,9 @@ BEGIN
             SELECT 1 FROM [inv].[t_inv_inventory] inv
             WHERE inv.location_id = loc.location_id
         )
-    ORDER BY loc.putaway_sequence ASC, loc.location ASC;
+    ORDER BY
+        loc.putaway_sequence ASC,
+        loc.location ASC;
 
     -- หมายเหตุ: ถ้าไม่มี location ว่างที่ตรงกับ category
     -- @out_int_location_id และ @out_vch_location จะเป็น NULL

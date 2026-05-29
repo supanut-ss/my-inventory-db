@@ -1,11 +1,14 @@
 USE [MyInventory]
 GO
-/****** Object:  StoredProcedure [inv].[usp_inbound_blind_receipt]    Script Date: 22/05/2026 10:13:09 ******/
+
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 
+-- ============================================================
+-- Object  : [inv].[usp_inbound_blind_receipt]
+-- ============================================================
 ALTER PROCEDURE [inv].[usp_inbound_blind_receipt]
     -- --------------------------------------------------------
     -- Blind Receipt: รับสินค้าโดยไม่อ้างอิง inbound_detail_id
@@ -282,7 +285,8 @@ BEGIN
             @in_int_input_uom_id,
             @v_vch_input_uom,
             @v_dec_base_qty,
-            @v_dec_base_qty,  -- quantity_received = quantity_order สำหรับ blind receipt
+            @v_dec_base_qty,
+            -- quantity_received = quantity_order สำหรับ blind receipt
             @v_vch_inv_status,
             @in_vch_lot_number,
             @in_dat_expiry_date,
@@ -420,16 +424,38 @@ BEGIN
                 update_date = GETDATE()
         WHEN NOT MATCHED THEN
             INSERT (
-                warehouse_id, warehouse, owner_id, owner_code,
-                location_id, location,
-                item_master_id, item_number, quantity, inv_status,
-                lot_number, expiry_date, receive_date, create_by, create_date
+                warehouse_id,
+                warehouse,
+                owner_id,
+                owner_code,
+                location_id,
+                location,
+                item_master_id,
+                item_number,
+                quantity,
+                inv_status,
+                lot_number,
+                expiry_date,
+                receive_date,
+                create_by,
+                create_date
             )
             VALUES (
-                source.warehouse_id, source.warehouse, source.owner_id, source.owner_code,
-                source.location_id, source.location,
-                source.item_master_id, source.item_number, @v_dec_base_qty, source.inv_status,
-                source.lot_number, source.expiry_date, CAST(GETDATE() AS DATE), @in_vch_user_id, GETDATE()
+                source.warehouse_id,
+                source.warehouse,
+                source.owner_id,
+                source.owner_code,
+                source.location_id,
+                source.location,
+                source.item_master_id,
+                source.item_number,
+                @v_dec_base_qty,
+                source.inv_status,
+                source.lot_number,
+                source.expiry_date,
+                CAST(GETDATE() AS DATE),
+                @in_vch_user_id,
+                GETDATE()
             );
 
         -- 3.5 Insert Serial Number (เฉพาะ item ที่ควบคุม SN แบบ FULL)

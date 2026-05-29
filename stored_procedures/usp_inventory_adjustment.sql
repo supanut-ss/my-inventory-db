@@ -298,16 +298,20 @@ BEGIN
         -- STEP 5: บันทึก Transaction Log
         -- ============================================================
         INSERT INTO [inv].[t_inv_tran_log] (
-            tran_type,          -- ประเภทธุรกรรมหลัก
-            sub_tran_type,      -- ประเภทธุรกรรมย่อย (ADJUST_IN / ADJUST_OUT)
-            description,        -- หมายเหตุการปรับ
+            tran_type,
+            -- ประเภทธุรกรรมหลัก
+            sub_tran_type,
+            -- ประเภทธุรกรรมย่อย (ADJUST_IN / ADJUST_OUT)
+            description,
+            -- หมายเหตุการปรับ
             warehouse_id,
             warehouse,
             owner_id,
             owner_code,
             location_id,
             location,
-            after_location_id,  -- ไม่เปลี่ยน location ใน adjustment
+            after_location_id,
+            -- ไม่เปลี่ยน location ใน adjustment
             after_location,
             item_master_id,
             item_number,
@@ -316,12 +320,15 @@ BEGIN
             item_uom_id,
             uom,
             inv_status,
-            after_inv_status,   -- ไม่เปลี่ยน status ใน adjustment
+            after_inv_status,
+            -- ไม่เปลี่ยน status ใน adjustment
             receive_date,
             lot_number,
-            after_lot_number,   -- ไม่เปลี่ยน lot ใน adjustment
+            after_lot_number,
+            -- ไม่เปลี่ยน lot ใน adjustment
             expiry_date,
-            after_expiry_date,  -- ไม่เปลี่ยน expiry ใน adjustment
+            after_expiry_date,
+            -- ไม่เปลี่ยน expiry ใน adjustment
             serial_number,
             device,
             create_by,
@@ -337,7 +344,8 @@ BEGIN
             @v_vch_owner_code,
             @v_int_location_id,
             @v_vch_location,
-            @v_int_location_id,     -- location ไม่เปลี่ยน
+            @v_int_location_id,
+            -- location ไม่เปลี่ยน
             @v_vch_location,
             @v_int_item_master_id,
             @v_vch_item_number,
@@ -346,12 +354,15 @@ BEGIN
             @v_int_item_uom_id,
             @v_vch_uom,
             @v_vch_inv_status,
-            @v_vch_inv_status,      -- status ไม่เปลี่ยน
+            @v_vch_inv_status,
+            -- status ไม่เปลี่ยน
             @v_dat_receive_date,
             @in_vch_lot_number,
-            @in_vch_lot_number,     -- lot ไม่เปลี่ยน
+            @in_vch_lot_number,
+            -- lot ไม่เปลี่ยน
             @in_dat_expiry_date,
-            @in_dat_expiry_date,    -- expiry ไม่เปลี่ยน
+            @in_dat_expiry_date,
+            -- expiry ไม่เปลี่ยน
             @in_vch_serial_number,
             @in_vch_device,
             @in_vch_user_id,

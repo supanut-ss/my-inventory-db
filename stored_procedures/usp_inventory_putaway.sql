@@ -249,20 +249,40 @@ BEGIN
                 update_date = GETDATE()
         WHEN NOT MATCHED THEN
             INSERT (
-                warehouse_id,  warehouse,  owner_id,       owner_code,
-                location_id,   location,
-                item_master_id, item_number, item_description,
-                quantity,      inv_status,
-                receive_date,  lot_number, expiry_date,
-                create_by,     create_date
+                warehouse_id,
+                warehouse,
+                owner_id,
+                owner_code,
+                location_id,
+                location,
+                item_master_id,
+                item_number,
+                item_description,
+                quantity,
+                inv_status,
+                receive_date,
+                lot_number,
+                expiry_date,
+                create_by,
+                create_date
             )
             VALUES (
-                source.warehouse_id, source.warehouse, source.owner_id, source.owner_code,
-                source.location_id,  source.location,
-                source.item_master_id, source.item_number, source.item_description,
-                @in_dec_qty, source.inv_status,
-                source.receive_date, source.lot_number, source.expiry_date,
-                @in_vch_user_id, GETDATE()
+                source.warehouse_id,
+                source.warehouse,
+                source.owner_id,
+                source.owner_code,
+                source.location_id,
+                source.location,
+                source.item_master_id,
+                source.item_number,
+                source.item_description,
+                @in_dec_qty,
+                source.inv_status,
+                source.receive_date,
+                source.lot_number,
+                source.expiry_date,
+                @in_vch_user_id,
+                GETDATE()
             );
 
         -- ============================================================
@@ -304,15 +324,19 @@ BEGIN
         -- STEP 6: บันทึก Transaction Log
         -- ============================================================
         INSERT INTO [inv].[t_inv_tran_log] (
-            tran_type,          -- ประเภทธุรกรรมหลัก
-            sub_tran_type,      -- ประเภทธุรกรรมย่อย
+            tran_type,
+            -- ประเภทธุรกรรมหลัก
+            sub_tran_type,
+            -- ประเภทธุรกรรมย่อย
             warehouse_id,
             warehouse,
             owner_id,
             owner_code,
-            location_id,        -- Source location
+            location_id,
+            -- Source location
             location,
-            after_location_id,  -- Target location (หลังย้าย)
+            after_location_id,
+            -- Target location (หลังย้าย)
             after_location,
             item_master_id,
             item_number,
@@ -339,9 +363,11 @@ BEGIN
             @v_vch_warehouse,
             @v_int_owner_id,
             @v_vch_owner_code,
-            @v_int_source_location_id,  -- location ก่อนย้าย
+            @v_int_source_location_id,
+            -- location ก่อนย้าย
             @v_vch_source_location,
-            @in_int_target_location_id, -- location หลังย้าย
+            @in_int_target_location_id,
+            -- location หลังย้าย
             @v_vch_target_location,
             @v_int_item_master_id,
             @v_vch_item_number,
@@ -350,12 +376,15 @@ BEGIN
             @v_int_item_uom_id,
             @v_vch_uom,
             @v_vch_inv_status,
-            @v_vch_inv_status,          -- inv_status ไม่เปลี่ยน ณ PUT_AWAY
+            @v_vch_inv_status,
+            -- inv_status ไม่เปลี่ยน ณ PUT_AWAY
             @v_dat_receive_date,
             @v_vch_lot_number,
-            @v_vch_lot_number,          -- lot ไม่เปลี่ยน
+            @v_vch_lot_number,
+            -- lot ไม่เปลี่ยน
             @v_dat_expiry_date,
-            @v_dat_expiry_date,         -- expiry ไม่เปลี่ยน
+            @v_dat_expiry_date,
+            -- expiry ไม่เปลี่ยน
             @in_vch_serial_number,
             @in_vch_device,
             @in_vch_user_id,

@@ -1,11 +1,14 @@
 USE [MyInventory]
 GO
-/****** Object:  StoredProcedure [inv].[usp_mobile_inbound_binding_location]    Script Date: 26/05/2026 15:22:00 ******/
+
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 
+-- ============================================================
+-- Object  : [inv].[usp_mobile_inbound_binding_location]
+-- ============================================================
 ALTER PROCEDURE [inv].[usp_mobile_inbound_binding_location]
     @in_vch_item_number     NVARCHAR(50),
     @in_vch_lang            VARCHAR(20),

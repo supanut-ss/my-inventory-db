@@ -1,11 +1,14 @@
 USE [MyInventory]
 GO
-/****** Object:  StoredProcedure [inv].[usp_inbound_receipt]    Script Date: 22/05/2026 10:01:22 ******/
+
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
 
+-- ============================================================
+-- Object  : [inv].[usp_inbound_receipt]
+-- ============================================================
 ALTER PROCEDURE [inv].[usp_inbound_receipt]
     @in_int_inbound_master_id     BIGINT        = NULL,
     @in_int_inbound_detail_id     BIGINT        = NULL,
@@ -65,8 +68,9 @@ BEGIN
         BEGIN TRANSACTION;
 
         -- Auto-select warehouse: TOP 1 active ORDER BY create_date
-        SELECT TOP 1 @v_int_warehouse_id = warehouse_id,
-                     @v_vch_warehouse    = warehouse
+        SELECT TOP 1
+            @v_int_warehouse_id = warehouse_id,
+            @v_vch_warehouse    = warehouse
         FROM [inv].[t_inv_warehouse]
         WHERE is_active = 1
         ORDER BY create_date ASC;
@@ -79,8 +83,9 @@ BEGIN
         END
 
         -- Auto-select owner: TOP 1 active ORDER BY create_date
-        SELECT TOP 1 @v_int_owner_id   = owner_id,
-                     @v_vch_owner_code = owner_code
+        SELECT TOP 1
+            @v_int_owner_id   = owner_id,
+            @v_vch_owner_code = owner_code
         FROM [inv].[t_inv_owner]
         WHERE is_active = 1
         ORDER BY create_date ASC;
@@ -133,17 +138,29 @@ BEGIN
 
             INSERT INTO [inv].[t_inv_inbound_master] (
                 inbound_master_id,
-                inbound_order_number, warehouse_id, warehouse,
-                owner_id, owner_code, order_type,
-                order_status, order_date,
-                create_by, create_date
+                inbound_order_number,
+                warehouse_id,
+                warehouse,
+                owner_id,
+                owner_code,
+                order_type,
+                order_status,
+                order_date,
+                create_by,
+                create_date
             )
             VALUES (
                 @in_int_inbound_master_id,
-                @v_vch_inbound_order_number, @v_int_warehouse_id, @v_vch_warehouse,
-                @v_int_owner_id, @v_vch_owner_code, @v_vch_order_type,
-                @in_vch_order_status, GETDATE(),
-                @in_vch_user_id, GETDATE()
+                @v_vch_inbound_order_number,
+                @v_int_warehouse_id,
+                @v_vch_warehouse,
+                @v_int_owner_id,
+                @v_vch_owner_code,
+                @v_vch_order_type,
+                @in_vch_order_status,
+                GETDATE(),
+                @in_vch_user_id,
+                GETDATE()
             );
 
             SET @in_int_inbound_detail_id = NEXT VALUE FOR [inv].[SEQInboundID];
@@ -151,23 +168,41 @@ BEGIN
             -- Insert detail โดยดึง primary UOM จาก t_inv_item_uom
             INSERT INTO [inv].[t_inv_inbound_detail] (
                 inbound_detail_id,
-                inbound_master_id, inbound_order_number, line_number,
-                item_master_id, item_number, item_description,
-                item_uom_id, uom,
-                quantity_order, quantity_received,
+                inbound_master_id,
+                inbound_order_number,
+                line_number,
+                item_master_id,
+                item_number,
+                item_description,
+                item_uom_id,
+                uom,
+                quantity_order,
+                quantity_received,
                 inv_status,
-                lot_number, expiry_date, serial_number,
-                create_by, create_date
+                lot_number,
+                expiry_date,
+                serial_number,
+                create_by,
+                create_date
             )
             SELECT
                 @in_int_inbound_detail_id,
-                @in_int_inbound_master_id, @v_vch_inbound_order_number, '1',
-                @in_int_item_master_id, @v_vch_item_number, @v_vch_item_description,
-                item_uom_id, uom,
-                @in_dec_qty, 0,
+                @in_int_inbound_master_id,
+                @v_vch_inbound_order_number,
+                '1',
+                @in_int_item_master_id,
+                @v_vch_item_number,
+                @v_vch_item_description,
+                item_uom_id,
+                uom,
+                @in_dec_qty,
+                0,
                 @in_vch_inv_status,
-                @in_vch_lot_number, @in_dat_expiry_date, @in_vch_serial_number,
-                @in_vch_user_id, GETDATE()
+                @in_vch_lot_number,
+                @in_dat_expiry_date,
+                @in_vch_serial_number,
+                @in_vch_user_id,
+                GETDATE()
             FROM [inv].[t_inv_item_uom]
             WHERE item_master_id = @in_int_item_master_id
               AND primary_uom    = 1;
@@ -296,32 +331,66 @@ BEGIN
 
             INSERT INTO [inv].[t_inv_inbound_receipt_header] (
                 receipt_header_id,
-                receipt_number, inbound_master_id, inbound_order_number,
-                receipt_status, create_by, create_date
+                receipt_number,
+                inbound_master_id,
+                inbound_order_number,
+                receipt_status,
+                create_by,
+                create_date
             )
             VALUES (
                 @v_int_receipt_header_id,
-                @v_vch_receipt_number, @in_int_inbound_master_id, @v_vch_inbound_order_number,
-                'OPEN', @in_vch_user_id, GETDATE()
+                @v_vch_receipt_number,
+                @in_int_inbound_master_id,
+                @v_vch_inbound_order_number,
+                'OPEN',
+                @in_vch_user_id,
+                GETDATE()
             );
         END
 
         -- Insert receipt detail
         INSERT INTO [inv].[t_inv_inbound_receipt_detail] (
-            receipt_header_id, receipt_number,
-            inbound_master_id, inbound_order_number, inbound_detail_id,
-            receipt_location_id, receipt_location,
-            item_master_id, item_number, quantity_received, item_uom_id, uom,
-            receipt_inv_status, lot_number, expiry_date, serial_number,
-            receive_date, create_by, create_date
+            receipt_header_id,
+            receipt_number,
+            inbound_master_id,
+            inbound_order_number,
+            inbound_detail_id,
+            receipt_location_id,
+            receipt_location,
+            item_master_id,
+            item_number,
+            quantity_received,
+            item_uom_id,
+            uom,
+            receipt_inv_status,
+            lot_number,
+            expiry_date,
+            serial_number,
+            receive_date,
+            create_by,
+            create_date
         )
         VALUES (
-            @v_int_receipt_header_id, @v_vch_receipt_number,
-            @in_int_inbound_master_id, @v_vch_inbound_order_number, @in_int_inbound_detail_id,
-            @in_int_receipt_location_id, @v_vch_receipt_location,
-            @in_int_item_master_id, @v_vch_item_number, @v_dec_base_qty, @v_int_base_uom_id, @v_vch_base_uom,
-            @v_vch_inv_status, @in_vch_lot_number, @in_dat_expiry_date, @in_vch_serial_number,
-            GETDATE(), @in_vch_user_id, GETDATE()
+            @v_int_receipt_header_id,
+            @v_vch_receipt_number,
+            @in_int_inbound_master_id,
+            @v_vch_inbound_order_number,
+            @in_int_inbound_detail_id,
+            @in_int_receipt_location_id,
+            @v_vch_receipt_location,
+            @in_int_item_master_id,
+            @v_vch_item_number,
+            @v_dec_base_qty,
+            @v_int_base_uom_id,
+            @v_vch_base_uom,
+            @v_vch_inv_status,
+            @in_vch_lot_number,
+            @in_dat_expiry_date,
+            @in_vch_serial_number,
+            GETDATE(),
+            @in_vch_user_id,
+            GETDATE()
         );
 
         -- อัปเดตจำนวนที่รับแล้วใน inbound detail
@@ -361,15 +430,38 @@ BEGIN
                 update_date = GETDATE()
         WHEN NOT MATCHED THEN
             INSERT (
-                warehouse_id, warehouse, owner_id, owner_code, location_id, location,
-                item_master_id, item_number, quantity, inv_status,
-                lot_number, expiry_date, receive_date, create_by, create_date
+                warehouse_id,
+                warehouse,
+                owner_id,
+                owner_code,
+                location_id,
+                location,
+                item_master_id,
+                item_number,
+                quantity,
+                inv_status,
+                lot_number,
+                expiry_date,
+                receive_date,
+                create_by,
+                create_date
             )
             VALUES (
-                source.warehouse_id, source.warehouse, source.owner_id, source.owner_code,
-                source.location_id, source.location,
-                source.item_master_id, source.item_number, @v_dec_base_qty, source.inv_status,
-                source.lot_number, source.expiry_date, CAST(GETDATE() AS DATE), @in_vch_user_id, GETDATE()
+                source.warehouse_id,
+                source.warehouse,
+                source.owner_id,
+                source.owner_code,
+                source.location_id,
+                source.location,
+                source.item_master_id,
+                source.item_number,
+                @v_dec_base_qty,
+                source.inv_status,
+                source.lot_number,
+                source.expiry_date,
+                CAST(GETDATE() AS DATE),
+                @in_vch_user_id,
+                GETDATE()
             );
 
         -- Insert serial number (เฉพาะ item ที่ควบคุม SN แบบ FULL)
@@ -385,10 +477,16 @@ BEGIN
               AND ISNULL(expiry_date, '1900-01-01') = ISNULL(@in_dat_expiry_date, '1900-01-01');
 
             INSERT INTO [inv].[t_inv_inventory_serial] (
-                inventory_id, serial_number, create_by, create_date
+                inventory_id,
+                serial_number,
+                create_by,
+                create_date
             )
             VALUES (
-                @v_int_inventory_id, @in_vch_serial_number, @in_vch_user_id, GETDATE()
+                @v_int_inventory_id,
+                @in_vch_serial_number,
+                @in_vch_user_id,
+                GETDATE()
             );
         END
 
@@ -396,29 +494,58 @@ BEGIN
         -- หมายเหตุ: location_id = after_location_id เพราะ Receipt คือการรับของเข้า
         -- ของเข้าสู่ระบบที่ location นี้โดยตรง จึงไม่มี "before location"
         INSERT INTO [inv].[t_inv_tran_log] (
-            tran_type, sub_tran_type,
-            warehouse_id, warehouse, owner_id, owner_code,
-            location_id, location, after_location_id, after_location,
-            item_master_id, item_number,
-            quantity, item_uom_id, uom,
-            inv_status, after_inv_status,
+            tran_type,
+            sub_tran_type,
+            warehouse_id,
+            warehouse,
+            owner_id,
+            owner_code,
+            location_id,
+            location,
+            after_location_id,
+            after_location,
+            item_master_id,
+            item_number,
+            quantity,
+            item_uom_id,
+            uom,
+            inv_status,
+            after_inv_status,
             receive_date,
-            lot_number, after_lot_number,
-            expiry_date, after_expiry_date,
-            serial_number, create_by, create_date
+            lot_number,
+            after_lot_number,
+            expiry_date,
+            after_expiry_date,
+            serial_number,
+            create_by,
+            create_date
         )
         VALUES (
-            'IO_RECEIPT', 'RECEIPT',
-            @v_int_warehouse_id, @v_vch_warehouse, @v_int_owner_id, @v_vch_owner_code,
-            @in_int_receipt_location_id, @v_vch_receipt_location,
-            @in_int_receipt_location_id, @v_vch_receipt_location,
-            @in_int_item_master_id, @v_vch_item_number,
-            @v_dec_base_qty, @v_int_base_uom_id, @v_vch_base_uom,
-            @v_vch_inv_status, @v_vch_inv_status,
+            'IO_RECEIPT',
+            'RECEIPT',
+            @v_int_warehouse_id,
+            @v_vch_warehouse,
+            @v_int_owner_id,
+            @v_vch_owner_code,
+            @in_int_receipt_location_id,
+            @v_vch_receipt_location,
+            @in_int_receipt_location_id,
+            @v_vch_receipt_location,
+            @in_int_item_master_id,
+            @v_vch_item_number,
+            @v_dec_base_qty,
+            @v_int_base_uom_id,
+            @v_vch_base_uom,
+            @v_vch_inv_status,
+            @v_vch_inv_status,
             CAST(GETDATE() AS DATE),
-            @in_vch_lot_number, @in_vch_lot_number,
-            @in_dat_expiry_date, @in_dat_expiry_date,
-            @in_vch_serial_number, @in_vch_user_id, GETDATE()
+            @in_vch_lot_number,
+            @in_vch_lot_number,
+            @in_dat_expiry_date,
+            @in_dat_expiry_date,
+            @in_vch_serial_number,
+            @in_vch_user_id,
+            GETDATE()
         );
 
         COMMIT TRANSACTION;

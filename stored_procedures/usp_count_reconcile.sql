@@ -1,11 +1,18 @@
--- Created by GitHub Copilot in SSMS - review carefully before executing
-/*
-    Summary:
-    This stored procedure [inv].[usp_count_reconcile] is designed to reconcile inventory count details
-    and update or insert records into both [t_inv_count_detail] and [t_inv_count_reconcile] tables.
-    It performs validation, handles error messaging via resource lookup, and logs process results.
-    The procedure supports multi-language error messages and ensures transactional integrity.
-*/
+USE [MyInventory]
+GO
+
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+
+-- ============================================================
+-- Object  : [inv].[usp_count_reconcile]
+-- ============================================================
+-- This stored procedure [inv].[usp_count_reconcile] is designed to reconcile inventory count details
+-- and update or insert records into both [t_inv_count_detail] and [t_inv_count_reconcile] tables.
+-- It performs validation, handles error messaging via resource lookup, and logs process results.
+-- The procedure supports multi-language error messages and ensures transactional integrity.
 
 CREATE OR ALTER PROCEDURE [inv].[usp_count_reconcile]
     @in_int_count_master_id    BIGINT,
@@ -144,9 +151,9 @@ BEGIN
                 AND owner_id       = @v_int_owner_id
                 AND location_id    = @in_int_location_id
                 AND item_master_id = @in_int_item_master_id
-                AND ISNULL(inv_status,  '') = ISNULL(@in_vch_inv_status, '')
-                AND ISNULL(lot_number,  '') = ISNULL(@in_vch_lot_number, '')
-                AND ISNULL(expiry_date, '1900-01-01') = ISNULL(@in_dat_expiry_date, '1900-01-01');
+            AND ISNULL(inv_status,  '') = ISNULL(@in_vch_inv_status, '')
+            AND ISNULL(lot_number,  '') = ISNULL(@in_vch_lot_number, '')
+            AND ISNULL(expiry_date, '1900-01-01') = ISNULL(@in_dat_expiry_date, '1900-01-01');
 
             SET @v_dat_receive_date = CAST(GETDATE() AS DATE);
 
