@@ -31,7 +31,7 @@ ALTER PROCEDURE [inv].[usp_inventory_adjustment]
 
     -- ── 3. Lot & Expiry Control ───────────────────────────────
     @in_vch_lot_number              NVARCHAR(50)   = NULL,     -- Lot number (จำเป็นเมื่อ lot_control = 'FULL')
-    @in_dat_expiry_date             DATE           = NULL,     -- Expiry date (จำเป็นเมื่อ expiry_date_control = 'FULL')
+    @in_dt_expiry_date             DATE           = NULL,     -- Expiry date (จำเป็นเมื่อ expiry_date_control = 'FULL')
 
     -- ── 4. Serial Control ─────────────────────────────────────
     @in_vch_serial_number           NVARCHAR(50)   = NULL,     -- Serial number (จำเป็นเมื่อ sn_control = 'FULL')
@@ -83,9 +83,9 @@ BEGIN
         @v_dec_adjust_qty               DECIMAL(18, 4),
         @v_int_current_inventory_id     BIGINT,
         @v_dec_current_row_qty          DECIMAL(18, 4),
-        @v_dat_current_receive_date     DATE,
+        @v_dt_current_receive_date     DATE,
         @v_vch_inv_status               NVARCHAR(50)  = 'Available',
-        @v_dat_receive_date             DATE,
+        @v_dt_receive_date             DATE,
         -- Item Control Flags
         @v_vch_lot_control              VARCHAR(10),
         @v_vch_expiry_control           VARCHAR(10),
@@ -127,7 +127,7 @@ BEGIN
             WHERE item_number                           = ISNULL(@in_vch_item_number, item_number)
               AND location                              = ISNULL(@in_vch_location, location)
               AND ISNULL(lot_number,   '')              = ISNULL(@in_vch_lot_number,    '')
-              AND ISNULL(expiry_date,  '')              = ISNULL(@in_dat_expiry_date,   '')
+              AND ISNULL(expiry_date,  '')              = ISNULL(@in_dt_expiry_date,   '')
               AND ISNULL(inv_status,   '')              = ISNULL(@v_vch_inv_status,     '')
             ORDER BY
                 receive_date ASC,
@@ -149,7 +149,7 @@ BEGIN
             @v_vch_item_description = inv.item_description,
             @v_dec_current_qty      = inv.quantity,
             @v_vch_inv_status       = inv.inv_status,
-            @v_dat_receive_date     = inv.receive_date
+            @v_dt_receive_date     = inv.receive_date
         FROM [inv].[t_inv_inventory] inv
         WHERE inv.inventory_id = @in_int_inventory_id;
 
@@ -194,7 +194,7 @@ BEGIN
               AND inv.item_master_id  = @v_int_item_master_id
               AND ISNULL(inv.inv_status,  '')           = ISNULL(@v_vch_inv_status,  '')
               AND ISNULL(inv.lot_number,  '')           = ISNULL(@in_vch_lot_number, '')
-              AND ISNULL(inv.expiry_date, '')           = ISNULL(@in_dat_expiry_date, '')
+              AND ISNULL(inv.expiry_date, '')           = ISNULL(@in_dt_expiry_date, '')
               AND (
                     @v_vch_sn_control <> 'FULL'
                     OR @in_vch_serial_number IS NULL
@@ -227,9 +227,9 @@ BEGIN
                 THEN 'ERR_LOT_REQUIRED'                     -- item ต้องการ lot แต่ไม่ได้ส่งมา
             WHEN @v_vch_lot_control = 'NONE' AND ISNULL(@in_vch_lot_number, '') <> ''
                 THEN 'ERR_LOT_MUST_BE_EMPTY'                -- item ไม่ใช้ lot แต่ส่ง lot มา
-            WHEN @v_vch_expiry_control = 'FULL' AND @in_dat_expiry_date IS NULL
+            WHEN @v_vch_expiry_control = 'FULL' AND @in_dt_expiry_date IS NULL
                 THEN 'ERR_EXPIRY_REQUIRED'                  -- item ต้องการ expiry แต่ไม่ได้ส่งมา
-            WHEN @v_vch_expiry_control = 'NONE' AND @in_dat_expiry_date IS NOT NULL
+            WHEN @v_vch_expiry_control = 'NONE' AND @in_dt_expiry_date IS NOT NULL
                 THEN 'ERR_EXPIRY_MUST_BE_EMPTY'             -- item ไม่ใช้ expiry แต่ส่ง expiry มา
             WHEN @v_vch_sn_control = 'FULL' AND ISNULL(@in_vch_serial_number, '') = ''
                 THEN 'ERR_SERIAL_REQUIRED'                  -- item ต้องการ serial แต่ไม่ได้ส่งมา
@@ -268,7 +268,7 @@ BEGIN
               AND inv.item_master_id  = @v_int_item_master_id
               AND ISNULL(inv.inv_status,  '')           = ISNULL(@v_vch_inv_status,  '')
               AND ISNULL(inv.lot_number,  '')           = ISNULL(@in_vch_lot_number, '')
-              AND ISNULL(inv.expiry_date, '')           = ISNULL(@in_dat_expiry_date, '')
+              AND ISNULL(inv.expiry_date, '')           = ISNULL(@in_dt_expiry_date, '')
               AND invs.serial_number = @in_vch_serial_number;
 
             IF @v_int_serial_exists = 0
@@ -296,7 +296,7 @@ BEGIN
         END
         ELSE
         BEGIN
-            SET @v_dat_receive_date  = NULL;
+            SET @v_dt_receive_date  = NULL;
             SET @v_dec_remaining_qty = @in_dec_qty;
 
             WHILE @v_dec_remaining_qty > 0
@@ -306,7 +306,7 @@ BEGIN
                 SELECT TOP 1
                     @v_int_current_inventory_id = inv.inventory_id,
                     @v_dec_current_row_qty      = inv.quantity,
-                    @v_dat_current_receive_date = inv.receive_date
+                    @v_dt_current_receive_date = inv.receive_date
                 FROM [inv].[t_inv_inventory] inv
                 WHERE inv.warehouse_id    = @v_int_warehouse_id
                   AND inv.owner_id        = @v_int_owner_id
@@ -315,7 +315,7 @@ BEGIN
                   AND inv.quantity        > 0
                   AND ISNULL(inv.inv_status,  '')           = ISNULL(@v_vch_inv_status,  '')
                   AND ISNULL(inv.lot_number,  '')           = ISNULL(@in_vch_lot_number, '')
-                  AND ISNULL(inv.expiry_date, '')           = ISNULL(@in_dat_expiry_date, '')
+                  AND ISNULL(inv.expiry_date, '')           = ISNULL(@in_dt_expiry_date, '')
                   AND (
                         @v_vch_sn_control <> 'FULL'
                         OR @in_vch_serial_number IS NULL
@@ -366,8 +366,8 @@ BEGIN
                     WHERE inventory_id = @v_int_current_inventory_id;
                 END
 
-                IF @v_dat_receive_date IS NULL
-                    SET @v_dat_receive_date = @v_dat_current_receive_date;
+                IF @v_dt_receive_date IS NULL
+                    SET @v_dt_receive_date = @v_dt_current_receive_date;
 
                 SET @v_dec_remaining_qty = @v_dec_remaining_qty - @v_dec_adjust_qty;
             END
@@ -460,12 +460,12 @@ BEGIN
             @v_vch_inv_status,
             @v_vch_inv_status,
             -- status ไม่เปลี่ยน
-            @v_dat_receive_date,
+            @v_dt_receive_date,
             @in_vch_lot_number,
             @in_vch_lot_number,
             -- lot ไม่เปลี่ยน
-            @in_dat_expiry_date,
-            @in_dat_expiry_date,
+            @in_dt_expiry_date,
+            @in_dt_expiry_date,
             -- expiry ไม่เปลี่ยน
             @in_vch_serial_number,
             @in_vch_device,

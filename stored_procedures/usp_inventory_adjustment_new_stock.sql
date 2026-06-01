@@ -27,7 +27,7 @@ CREATE OR ALTER PROCEDURE [inv].[usp_inventory_adjustment_new_stock]
 
     -- ── 2. Lot & Expiry Control ───────────────────────────────
     @in_vch_lot_number              NVARCHAR(50)   = NULL,     -- Lot number (จำเป็นเมื่อ lot_control = 'FULL')
-    @in_dat_expiry_date             DATE           = NULL,     -- Expiry date (จำเป็นเมื่อ expiry_date_control = 'FULL')
+    @in_dt_expiry_date             DATE           = NULL,     -- Expiry date (จำเป็นเมื่อ expiry_date_control = 'FULL')
 
     -- ── 3. Serial Control ─────────────────────────────────────
     @in_vch_serial_number           NVARCHAR(50)   = NULL,     -- Serial number (จำเป็นเมื่อ sn_control = 'FULL')
@@ -35,7 +35,7 @@ CREATE OR ALTER PROCEDURE [inv].[usp_inventory_adjustment_new_stock]
     -- ── 4. Operation-specific Parameters ─────────────────────
     @in_dec_qty                     DECIMAL(18, 4),            -- จำนวนที่ต้องการเพิ่ม (ต้องมากกว่า 0)
     @in_vch_inv_status              NVARCHAR(50),              -- สถานะ inventory (เช่น 'Available', 'Hold', 'Damaged')
-    @in_dat_receive_date            DATE           = NULL,     -- วันที่รับสินค้า (NULL = ใช้ GETDATE())
+    @in_dt_receive_date            DATE           = NULL,     -- วันที่รับสินค้า (NULL = ใช้ GETDATE())
 
     -- ── 5. Remark / Description ───────────────────────────────
     @in_vch_remark                 NVARCHAR(200)  = NULL,     -- หมายเหตุการปรับ (บันทึกใน tran_log)
@@ -80,7 +80,7 @@ BEGIN
         -- Inventory
         @v_int_inventory_id             BIGINT,
         @v_int_serial_exists            INT,
-        @v_dat_receive_date             DATE,
+        @v_dt_receive_date             DATE,
         -- Process Tracking
         @v_dt_process_start             DATETIME      = GETDATE();
 
@@ -88,7 +88,7 @@ BEGIN
         BEGIN TRANSACTION;
 
         -- กำหนด receive_date: ถ้าไม่ได้ส่งมาให้ใช้ GETDATE()
-        SET @v_dat_receive_date = ISNULL(@in_dat_receive_date, CAST(GETDATE() AS DATE));
+        SET @v_dt_receive_date = ISNULL(@in_dt_receive_date, CAST(GETDATE() AS DATE));
 
         -- ============================================================
         -- STEP 0: Resolve Warehouse, Owner, Location, Item
@@ -158,9 +158,9 @@ BEGIN
                 THEN 'ERR_LOT_REQUIRED'                         -- item ต้องการ lot แต่ไม่ได้ส่งมา
             WHEN @v_vch_lot_control = 'NONE' AND ISNULL(@in_vch_lot_number, '') <> ''
                 THEN 'ERR_LOT_MUST_BE_EMPTY'                    -- item ไม่ใช้ lot แต่ส่ง lot มา
-            WHEN @v_vch_expiry_control = 'FULL' AND @in_dat_expiry_date IS NULL
+            WHEN @v_vch_expiry_control = 'FULL' AND @in_dt_expiry_date IS NULL
                 THEN 'ERR_EXPIRY_REQUIRED'                      -- item ต้องการ expiry แต่ไม่ได้ส่งมา
-            WHEN @v_vch_expiry_control = 'NONE' AND @in_dat_expiry_date IS NOT NULL
+            WHEN @v_vch_expiry_control = 'NONE' AND @in_dt_expiry_date IS NOT NULL
                 THEN 'ERR_EXPIRY_MUST_BE_EMPTY'                 -- item ไม่ใช้ expiry แต่ส่ง expiry มา
             WHEN @v_vch_sn_control = 'FULL' AND ISNULL(@in_vch_serial_number, '') = ''
                 THEN 'ERR_SERIAL_REQUIRED'                      -- item ต้องการ serial แต่ไม่ได้ส่งมา
@@ -228,8 +228,8 @@ BEGIN
             @in_dec_qty,
             @in_vch_inv_status,
             @in_vch_lot_number,
-            @in_dat_expiry_date,
-            @v_dat_receive_date,
+            @in_dt_expiry_date,
+            @v_dt_receive_date,
             @in_vch_user_id,
             GETDATE(),
             @in_vch_user_id,
@@ -237,7 +237,17 @@ BEGIN
         );
 
         -- ดึง inventory_id ที่เพิ่งสร้าง
-        SET @v_int_inventory_id = SCOPE_IDENTITY();
+        SELECT TOP 1 @v_int_inventory_id = inventory_id
+        FROM [inv].[t_inv_inventory]
+        WHERE warehouse_id   = @v_int_warehouse_id
+          AND owner_id       = @v_int_owner_id
+          AND location_id    = @v_int_location_id
+          AND item_master_id = @v_int_item_master_id
+          AND ISNULL(inv_status,   '') = ISNULL(@in_vch_inv_status,  '')
+          AND ISNULL(lot_number,   '') = ISNULL(@in_vch_lot_number,  '')
+          AND ISNULL(expiry_date,  '') = ISNULL(@in_dt_expiry_date,  '')
+          AND ISNULL(receive_date, '') = ISNULL(@v_dt_receive_date,  '')
+        ORDER BY inventory_id DESC;
 
         -- ============================================================
         -- STEP 3: จัดการ Serial (ถ้า sn_control = 'FULL')
@@ -321,12 +331,12 @@ BEGIN
             @in_vch_inv_status,
             @in_vch_inv_status,
             -- status ไม่เปลี่ยน
-            @v_dat_receive_date,
+            @v_dt_receive_date,
             @in_vch_lot_number,
             @in_vch_lot_number,
             -- lot ไม่เปลี่ยน
-            @in_dat_expiry_date,
-            @in_dat_expiry_date,
+            @in_dt_expiry_date,
+            @in_dt_expiry_date,
             -- expiry ไม่เปลี่ยน
             @in_vch_serial_number,
             @in_vch_device,

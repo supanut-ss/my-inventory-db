@@ -19,7 +19,7 @@ ALTER PROCEDURE [inv].[usp_inbound_blind_receipt]
     @in_int_input_uom_id          INT,
     @in_dec_qty                   DECIMAL(18, 4),
     @in_vch_lot_number            NVARCHAR(50)  = NULL,
-    @in_dat_expiry_date           DATE          = NULL,
+    @in_dt_expiry_date           DATE          = NULL,
     @in_vch_serial_number         NVARCHAR(50)  = NULL,
     @in_int_receipt_location_id   INT,
     @in_int_receipt_header_id     BIGINT        = NULL,  -- NULL = หา/สร้างใหม่
@@ -236,8 +236,8 @@ BEGIN
             WHEN @v_vch_receipt_location IS NULL                                         THEN 'ERR_LOCATION_NOT_FOUND'
             WHEN @v_vch_lot_control = 'FULL' AND ISNULL(@in_vch_lot_number, '') = ''    THEN 'ERR_LOT_REQUIRED'
             WHEN @v_vch_lot_control = 'NONE' AND ISNULL(@in_vch_lot_number, '') <> ''   THEN 'ERR_LOT_MUST_BE_EMPTY'
-            WHEN @v_vch_expiry_control = 'FULL' AND @in_dat_expiry_date IS NULL          THEN 'ERR_EXPIRY_REQUIRED'
-            WHEN @v_vch_expiry_control = 'NONE' AND @in_dat_expiry_date IS NOT NULL      THEN 'ERR_EXPIRY_MUST_BE_EMPTY'
+            WHEN @v_vch_expiry_control = 'FULL' AND @in_dt_expiry_date IS NULL          THEN 'ERR_EXPIRY_REQUIRED'
+            WHEN @v_vch_expiry_control = 'NONE' AND @in_dt_expiry_date IS NOT NULL      THEN 'ERR_EXPIRY_MUST_BE_EMPTY'
             WHEN @v_vch_sn_control = 'FULL' AND ISNULL(@in_vch_serial_number, '') = ''  THEN 'ERR_SERIAL_REQUIRED'
             WHEN @v_vch_sn_control = 'NONE' AND ISNULL(@in_vch_serial_number, '') <> '' THEN 'ERR_SERIAL_MUST_BE_EMPTY'
             ELSE 'SUCCESS'
@@ -310,7 +310,7 @@ BEGIN
             -- quantity_received = quantity_order สำหรับ blind receipt
             @v_vch_inv_status,
             @in_vch_lot_number,
-            @in_dat_expiry_date,
+            @in_dt_expiry_date,
             @in_vch_serial_number,
             @in_vch_user_id,
             GETDATE()
@@ -422,7 +422,7 @@ BEGIN
             @v_vch_base_uom,
             @v_vch_inv_status,
             @in_vch_lot_number,
-            @in_dat_expiry_date,
+            @in_dt_expiry_date,
             @in_vch_serial_number,
             GETDATE(),
             @in_vch_user_id,
@@ -443,7 +443,7 @@ BEGIN
                 @v_vch_item_number          AS item_number,
                 @v_vch_inv_status           AS inv_status,
                 @in_vch_lot_number          AS lot_number,
-                @in_dat_expiry_date         AS expiry_date
+                @in_dt_expiry_date         AS expiry_date
         ) AS source
         ON  target.warehouse_id                          = source.warehouse_id
             AND target.owner_id                          = source.owner_id
@@ -504,7 +504,7 @@ BEGIN
               AND inv.location_id      = @in_int_receipt_location_id
               AND inv.item_master_id   = @in_int_item_master_id
               AND ISNULL(inv.lot_number,  '')           = ISNULL(@in_vch_lot_number,  '')
-              AND ISNULL(inv.expiry_date, '') = ISNULL(@in_dat_expiry_date, '');
+              AND ISNULL(inv.expiry_date, '') = ISNULL(@in_dt_expiry_date, '');
 
             IF @v_int_inventory_id IS NULL
             BEGIN
@@ -583,8 +583,8 @@ BEGIN
             CAST(GETDATE() AS DATE),
             @in_vch_lot_number,
             @in_vch_lot_number,
-            @in_dat_expiry_date,
-            @in_dat_expiry_date,
+            @in_dt_expiry_date,
+            @in_dt_expiry_date,
             @in_vch_serial_number,
             @in_vch_user_id,
             GETDATE()

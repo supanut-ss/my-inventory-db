@@ -16,7 +16,7 @@ ALTER PROCEDURE [inv].[usp_inbound_receipt]
     @in_vch_uom                   NVARCHAR(10),
     @in_dec_qty                   DECIMAL(18, 4),
     @in_vch_lot_number            NVARCHAR(50)  = NULL,
-    @in_dat_expiry_date           DATE          = NULL,
+    @in_dt_expiry_date           DATE          = NULL,
     @in_vch_serial_number         NVARCHAR(50)  = NULL,
     @in_int_receipt_location_id   INT,
     @in_vch_inv_status            NVARCHAR(50)  = 'Available',
@@ -46,7 +46,7 @@ BEGIN
         @v_vch_expiry_control         VARCHAR(10),
         @v_vch_sn_control             VARCHAR(10),
         @v_vch_plan_lot               NVARCHAR(50),
-        @v_dat_plan_expiry            DATE,
+        @v_dt_plan_expiry            DATE,
         @v_vch_plan_serial            NVARCHAR(50),
         @v_int_serial_exists          INT,
         @v_vch_inbound_order_number   NVARCHAR(50),
@@ -199,7 +199,7 @@ BEGIN
                 0,
                 @in_vch_inv_status,
                 @in_vch_lot_number,
-                @in_dat_expiry_date,
+                @in_dt_expiry_date,
                 @in_vch_serial_number,
                 @in_vch_user_id,
                 GETDATE()
@@ -236,7 +236,7 @@ BEGIN
             @v_bit_is_item_exist        = CASE WHEN id.inbound_detail_id IS NOT NULL THEN 1 ELSE 0 END,
             @v_dec_rem_plan_qty         = (id.quantity_order - ISNULL(id.quantity_received, 0)),
             @v_vch_plan_lot             = id.lot_number,
-            @v_dat_plan_expiry          = id.expiry_date,
+            @v_dt_plan_expiry          = id.expiry_date,
             @v_vch_plan_serial          = id.serial_number,
             @v_vch_inbound_order_number = im.inbound_order_number,
             @v_int_warehouse_id         = im.warehouse_id,
@@ -281,12 +281,12 @@ BEGIN
             WHEN @v_int_input_uom_id IS NULL                                                     THEN 'ERR_UOM_NOT_FOUND'
             WHEN @v_vch_lot_control = 'FULL' AND ISNULL(@in_vch_lot_number, '') = ''            THEN 'ERR_LOT_REQUIRED'
             WHEN @v_vch_lot_control = 'NONE' AND ISNULL(@in_vch_lot_number, '') <> ''           THEN 'ERR_LOT_MUST_BE_EMPTY'
-            WHEN @v_vch_expiry_control = 'FULL' AND @in_dat_expiry_date IS NULL                  THEN 'ERR_EXPIRY_REQUIRED'
-            WHEN @v_vch_expiry_control = 'NONE' AND @in_dat_expiry_date IS NOT NULL              THEN 'ERR_EXPIRY_MUST_BE_EMPTY'
+            WHEN @v_vch_expiry_control = 'FULL' AND @in_dt_expiry_date IS NULL                  THEN 'ERR_EXPIRY_REQUIRED'
+            WHEN @v_vch_expiry_control = 'NONE' AND @in_dt_expiry_date IS NOT NULL              THEN 'ERR_EXPIRY_MUST_BE_EMPTY'
             WHEN @v_vch_sn_control = 'FULL' AND ISNULL(@in_vch_serial_number, '') = ''          THEN 'ERR_SERIAL_REQUIRED'
             WHEN @v_vch_sn_control = 'NONE' AND ISNULL(@in_vch_serial_number, '') <> ''         THEN 'ERR_SERIAL_MUST_BE_EMPTY'
             WHEN @v_vch_plan_lot IS NOT NULL AND @v_vch_plan_lot <> @in_vch_lot_number          THEN 'ERR_LOT_MISMATCH'
-            WHEN @v_dat_plan_expiry IS NOT NULL AND @v_dat_plan_expiry <> @in_dat_expiry_date    THEN 'ERR_EXPIRY_MISMATCH'
+            WHEN @v_dt_plan_expiry IS NOT NULL AND @v_dt_plan_expiry <> @in_dt_expiry_date    THEN 'ERR_EXPIRY_MISMATCH'
             WHEN @v_vch_plan_serial IS NOT NULL AND @v_vch_plan_serial <> @in_vch_serial_number  THEN 'ERR_SERIAL_MISMATCH'
             WHEN @v_dec_base_qty > @v_dec_rem_plan_qty                                           THEN 'ERR_QTY_EXCEEDS_PLAN'
             ELSE 'SUCCESS'
@@ -386,7 +386,7 @@ BEGIN
             @v_vch_base_uom,
             @v_vch_inv_status,
             @in_vch_lot_number,
-            @in_dat_expiry_date,
+            @in_dt_expiry_date,
             @in_vch_serial_number,
             GETDATE(),
             @in_vch_user_id,
@@ -414,7 +414,7 @@ BEGIN
                 @v_vch_item_number          AS item_number,
                 @v_vch_inv_status           AS inv_status,
                 @in_vch_lot_number          AS lot_number,
-                @in_dat_expiry_date         AS expiry_date
+                @in_dt_expiry_date         AS expiry_date
         ) AS source
         ON  target.warehouse_id                          = source.warehouse_id
             AND target.owner_id                          = source.owner_id
@@ -474,7 +474,7 @@ BEGIN
               AND location_id    = @in_int_receipt_location_id
               AND item_master_id = @in_int_item_master_id
               AND ISNULL(lot_number,  '')           = ISNULL(@in_vch_lot_number,  '')
-              AND ISNULL(expiry_date, '')           = ISNULL(@in_dat_expiry_date, '');
+              AND ISNULL(expiry_date, '')           = ISNULL(@in_dt_expiry_date, '');
 
             INSERT INTO [inv].[t_inv_inventory_serial] (
                 inventory_id,
@@ -541,8 +541,8 @@ BEGIN
             CAST(GETDATE() AS DATE),
             @in_vch_lot_number,
             @in_vch_lot_number,
-            @in_dat_expiry_date,
-            @in_dat_expiry_date,
+            @in_dt_expiry_date,
+            @in_dt_expiry_date,
             @in_vch_serial_number,
             @in_vch_user_id,
             GETDATE()

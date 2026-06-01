@@ -14,7 +14,7 @@ GO
 -- PARAMETER CONVENTIONS (เรียงลำดับเหมือนกันทุก Stored Procedure)
 --   1. inventory_id / lookup keys  (ตัวระบุ record หลัก)
 --   2. item_number / location      (lookup fallback)
---   3. lot_number / expiry_date    (lot & expiry control)
+--   3. lot_number / expiry_date / inv_status (lot, expiry & status control)
 --   4. serial_number               (serial control)
 --   5. operation-specific params   (เฉพาะ SP นี้ เช่น target_location, qty)
 --   6. reason / remark             (หมายเหตุ บันทึกลง tran_log)
@@ -29,10 +29,11 @@ CREATE OR ALTER PROCEDURE [inv].[usp_inventory_putaway]
     @in_vch_item_number             NVARCHAR(50)   = NULL,     -- Item number สำหรับค้นหา inventory
     @in_vch_location                NVARCHAR(50)   = NULL,     -- Location สำหรับค้นหา inventory
 
-    -- ── 3. Lot & Expiry Control ───────────────────────────────
+    -- ── 3. Lot, Expiry & Status Control ──────────────────────
     @in_vch_lot_number              NVARCHAR(50)   = NULL,     -- Lot number (จำเป็นเมื่อ lot_control = 'FULL')
-    @in_dat_expiry_date             DATE           = NULL,     -- Expiry date (จำเป็นเมื่อ expiry_date_control = 'FULL')
-
+    @in_dt_expiry_date              DATE           = NULL,     -- Expiry date (จำเป็นเมื่อ expiry_date_control = 'FULL')
+    @in_vch_inv_status              NVARCHAR(50)   = NULL,     -- Inventory status (ใช้ค้นหา inventory)
+ 
     -- ── 4. Serial Control ─────────────────────────────────────
     @in_vch_serial_number           NVARCHAR(50)   = NULL,     -- Serial number ที่ต้องการย้ายเฉพาะตัว (NULL = ย้ายทุก serial)
 
@@ -83,9 +84,9 @@ BEGIN
         -- Inventory Detail
         @v_dec_source_qty               DECIMAL(18, 4),
         @v_vch_inv_status               NVARCHAR(50),
-        @v_dat_receive_date             DATE,
+        @v_dt_receive_date              DATE,
         @v_vch_lot_number               NVARCHAR(50),
-        @v_dat_expiry_date              DATE,
+        @v_dt_expiry_date               DATE,
         -- Serial
         @v_int_serial_count             INT,
         -- Process Tracking
@@ -123,8 +124,8 @@ BEGIN
             WHERE item_number                           = ISNULL(@in_vch_item_number, item_number)
               AND location                              = ISNULL(@in_vch_location, location)
               AND ISNULL(lot_number,   '')              = ISNULL(@in_vch_lot_number,    '')
-              AND ISNULL(expiry_date,  '')              = ISNULL(@in_dat_expiry_date,   '')
-              AND ISNULL(inv_status,   '')              = ISNULL(@v_vch_inv_status,     '')
+              AND ISNULL(expiry_date,  '')              = ISNULL(@in_dt_expiry_date,   '')
+              AND ISNULL(inv_status,   '')              = ISNULL(@in_vch_inv_status,    '')
             ORDER BY inventory_id ASC;
         END
 
@@ -143,9 +144,9 @@ BEGIN
             @v_vch_item_description     = inv.item_description,
             @v_dec_source_qty           = inv.quantity,
             @v_vch_inv_status           = inv.inv_status,
-            @v_dat_receive_date         = inv.receive_date,
+            @v_dt_receive_date         = inv.receive_date,
             @v_vch_lot_number           = inv.lot_number,
-            @v_dat_expiry_date          = inv.expiry_date
+            @v_dt_expiry_date          = inv.expiry_date
         FROM [inv].[t_inv_inventory] inv
         WHERE inv.inventory_id = @in_int_inventory_id;
 
@@ -247,9 +248,9 @@ BEGIN
                 @v_vch_item_number         AS item_number,
                 @v_vch_item_description    AS item_description,
                 @v_vch_inv_status          AS inv_status,
-                @v_dat_receive_date        AS receive_date,
+                @v_dt_receive_date        AS receive_date,
                 @v_vch_lot_number          AS lot_number,
-                @v_dat_expiry_date         AS expiry_date
+                @v_dt_expiry_date         AS expiry_date
         ) AS source
         ON  target.warehouse_id                          = source.warehouse_id
             AND target.owner_id                          = source.owner_id
@@ -320,8 +321,8 @@ BEGIN
               AND inv.item_master_id                       = @v_int_item_master_id
               AND ISNULL(inv.inv_status,   '')             = ISNULL(@v_vch_inv_status,   '')
               AND ISNULL(inv.lot_number,   '')             = ISNULL(@v_vch_lot_number,   '')
-              AND ISNULL(inv.expiry_date,  '')             = ISNULL(@v_dat_expiry_date,  '')
-              AND ISNULL(inv.receive_date, '')             = ISNULL(@v_dat_receive_date, '');
+              AND ISNULL(inv.expiry_date,  '')             = ISNULL(@v_dt_expiry_date,  '')
+              AND ISNULL(inv.receive_date, '')             = ISNULL(@v_dt_receive_date, '');
 
             -- Reassign serial: ชี้ inventory_id จาก source → target
             -- ถ้าระบุ serial เฉพาะตัว → ย้ายแค่ตัวนั้น
@@ -396,12 +397,12 @@ BEGIN
             @v_vch_inv_status,
             @v_vch_inv_status,
             -- inv_status ไม่เปลี่ยน ณ PUT_AWAY
-            @v_dat_receive_date,
+            @v_dt_receive_date,
             @v_vch_lot_number,
             @v_vch_lot_number,
             -- lot ไม่เปลี่ยน
-            @v_dat_expiry_date,
-            @v_dat_expiry_date,
+            @v_dt_expiry_date,
+            @v_dt_expiry_date,
             -- expiry ไม่เปลี่ยน
             @in_vch_serial_number,
             @in_vch_device,
