@@ -40,8 +40,8 @@ ALTER PROCEDURE [inv].[usp_inventory_adjustment]
     @in_vch_adj_type                VARCHAR(10),               -- ประเภทการปรับ: 'ADJUST_IN' (เพิ่ม) | 'ADJUST_OUT' (ลด)
     @in_dec_qty                     DECIMAL(18, 4),            -- จำนวนที่ต้องการปรับ (ต้องมากกว่า 0)
 
-    -- ── 6. Reason / Description ───────────────────────────────
-    @in_vch_reason                  NVARCHAR(200)  = NULL,     -- หมายเหตุการปรับ (บันทึกใน tran_log)
+    -- ── 6. Remark / Description ───────────────────────────────
+    @in_vch_remark                  NVARCHAR(200)  = NULL,     -- หมายเหตุการปรับ (บันทึกใน tran_log)
 
     -- ── 7. Context: Lang / Device / User ─────────────────────
     @in_vch_lang                    VARCHAR(20),               -- รหัสภาษาสำหรับ error message (เช่น 'TH', 'EN')
@@ -471,7 +471,7 @@ BEGIN
             @in_vch_device,
             @in_vch_user_id,
             GETDATE(),
-            @in_vch_reason
+            @in_vch_remark
         );
 
         COMMIT TRANSACTION;

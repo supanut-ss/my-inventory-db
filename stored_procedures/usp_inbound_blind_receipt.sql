@@ -172,6 +172,20 @@ BEGIN
         FROM [inv].[t_inv_inbound_master] im
         WHERE im.inbound_master_id = @in_int_inbound_master_id;
 
+        -- Guard: ถ้า inbound_order_number ยังเป็น NULL (master ไม่พบ) → raise error ก่อน
+        -- เพื่อป้องกัน NULL ไหลไปใช้ใน usp_generate_receipt_number และ INSERT receipt_detail
+        IF @v_vch_inbound_order_number IS NULL
+        BEGIN
+            SET @out_vch_error_code    = 'ERR_INBOUND_ORDER_NOT_FOUND';
+            SET @out_vch_error_message = [sec].usf_get_resouce_value(
+                'STORED_PROCEDURE',
+                @out_vch_error_code,
+                @in_vch_lang,
+                '@param1','@param2','@param3','@param4','@param5'
+            );
+            RAISERROR(@out_vch_error_message, 16, 1);
+        END
+
         -- 1.2 Get Item Info + controls
         SELECT
             @v_vch_item_number      = itm.item_number,
@@ -323,6 +337,20 @@ BEGIN
                 @v_vch_receipt_number = receipt_number
             FROM [inv].[t_inv_inbound_receipt_header]
             WHERE receipt_header_id = @v_int_receipt_header_id;
+
+            -- Guard: ถ้า header id ส่งมาแต่หาไม่พบในตาราง → receipt_number จะเป็น NULL
+            -- ต้อง raise error แทนที่จะปล่อยให้ INSERT receipt_detail fail ด้วย error ที่อ่านยาก
+            IF @v_vch_receipt_number IS NULL
+            BEGIN
+                SET @out_vch_error_code    = 'ERR_RECEIPT_HEADER_NOT_FOUND';
+                SET @out_vch_error_message = [sec].usf_get_resouce_value(
+                    'STORED_PROCEDURE',
+                    @out_vch_error_code,
+                    @in_vch_lang,
+                    '@param1','@param2','@param3','@param4','@param5'
+                );
+                RAISERROR(@out_vch_error_message, 16, 1);
+            END
         END
 
         -- ถ้าหา header ไม่ได้ ให้สร้างใหม่

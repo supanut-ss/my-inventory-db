@@ -16,8 +16,8 @@ GO
 --   2. item_number / location      (lookup fallback)
 --   3. lot_number / expiry_date    (lot & expiry control)
 --   4. serial_number               (serial control)
---   5. operation-specific params   (เฉพาะ SP นี้ เช่น target_location)
---   6. reason / description        (หมายเหตุ)
+--   5. operation-specific params   (เฉพาะ SP นี้ เช่น target_location, qty)
+--   6. reason / remark             (หมายเหตุ บันทึกลง tran_log)
 --   7. lang / device / user_id     (context สำหรับ logging และ i18n)
 --   8. OUTPUT params               (error_code, error_message)
 -- ============================================================
@@ -38,14 +38,18 @@ CREATE OR ALTER PROCEDURE [inv].[usp_inventory_putaway]
 
     -- ── 5. Operation-specific Parameters ─────────────────────
     @in_dec_qty                     DECIMAL(18, 4),            -- จำนวนที่ต้องการย้าย (รองรับ partial put away)
-    @in_int_target_location_id      INT,                       -- Location ID ปลายทางที่ต้องการย้ายไป
+    @in_int_target_location_id      INT            = NULL,     -- Location ID ปลายทาง (NULL = resolve จาก @in_vch_target_location)
+    @in_vch_target_location         NVARCHAR(50)   = NULL,     -- Location code ปลายทาง (ใช้เมื่อไม่มี target_location_id)
 
-    -- ── 6. Context: Lang / Device / User ─────────────────────
+    -- ── 6. Remark / Remark ────────────────────────────────────
+    @in_vch_remark                  NVARCHAR(200)  = NULL,     -- หมายเหตุการย้าย (บันทึกลง tran_log)
+
+    -- ── 7. Context: Lang / Device / User ─────────────────────
     @in_vch_lang                    VARCHAR(20),               -- รหัสภาษาสำหรับ error message (เช่น 'TH', 'EN')
     @in_vch_device                  NVARCHAR(50)   = NULL,     -- Device ที่ทำรายการ (สำหรับ log)
     @in_vch_user_id                 NVARCHAR(50),              -- User ที่ทำรายการ
 
-    -- ── 7. Output Parameters ──────────────────────────────────
+    -- ── 8. Output Parameters ──────────────────────────────────
     @out_vch_error_code             VARCHAR(50)    OUTPUT,     -- '0' = สำเร็จ, 'ERR_xxx' = ผิดพลาด
     @out_vch_error_message          NVARCHAR(255)  OUTPUT      -- ข้อความแสดงผล (ดึงจาก resource table)
 AS
@@ -153,10 +157,23 @@ BEGIN
         WHERE iuom.item_master_id = @v_int_item_master_id
           AND iuom.primary_uom    = 1;
 
-        -- ดึงชื่อ Target Location
-        SELECT @v_vch_target_location = loc.location
-        FROM [inv].[t_inv_location] loc
-        WHERE loc.location_id = @in_int_target_location_id;
+        -- Resolve Target Location: ถ้าไม่มี target_location_id → หาจาก location code
+        IF @in_int_target_location_id IS NULL AND @in_vch_target_location IS NOT NULL
+        BEGIN
+            SELECT
+                @in_int_target_location_id = loc.location_id,
+                @v_vch_target_location     = loc.location
+            FROM [inv].[t_inv_location] loc
+            WHERE loc.location   = @in_vch_target_location
+              AND loc.is_active  = 1;
+        END
+        ELSE
+        BEGIN
+            -- มี target_location_id → ดึงชื่อ location จาก id
+            SELECT @v_vch_target_location = loc.location
+            FROM [inv].[t_inv_location] loc
+            WHERE loc.location_id = @in_int_target_location_id;
+        END
 
         -- ============================================================
         -- STEP 2: Validation
@@ -354,7 +371,8 @@ BEGIN
             serial_number,
             device,
             create_by,
-            create_date
+            create_date,
+            remark
         )
         VALUES (
             'PUT_AWAY',
@@ -388,7 +406,8 @@ BEGIN
             @in_vch_serial_number,
             @in_vch_device,
             @in_vch_user_id,
-            GETDATE()
+            GETDATE(),
+            @in_vch_remark
         );
 
         COMMIT TRANSACTION;
