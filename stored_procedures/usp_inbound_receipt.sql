@@ -1,10 +1,12 @@
 ﻿USE [MyInventory]
 GO
 
+
 SET ANSI_NULLS ON
 GO
 SET QUOTED_IDENTIFIER ON
 GO
+
 
 -- ============================================================
 -- Object  : [inv].[usp_inbound_receipt]
@@ -28,6 +30,7 @@ ALTER PROCEDURE [inv].[usp_inbound_receipt]
 AS
 BEGIN
     SET NOCOUNT ON;
+
 
     DECLARE
         @v_vch_error_code             VARCHAR(50),
@@ -62,8 +65,10 @@ BEGIN
         @v_vch_receipt_number         NVARCHAR(50),
         @v_vch_item_description       NVARCHAR(255);
 
+
     BEGIN TRY
         BEGIN TRANSACTION;
+
 
         -- Auto-select warehouse: TOP 1 active ORDER BY create_date
         SELECT TOP 1
@@ -73,12 +78,14 @@ BEGIN
         WHERE is_active = 1
         ORDER BY warehouse_id ASC;
 
+
         IF @v_int_warehouse_id IS NULL
         BEGIN
             SET @out_vch_error_code    = 'ERR_WAREHOUSE_NOT_FOUND';
             SET @out_vch_error_message = [sec].usf_get_resouce_value('STORED_PROCEDURE',@out_vch_error_code,@in_vch_lang,'@param1','@param2','@param3','@param4','@param5');
             RAISERROR(@out_vch_error_message, 16, 1);
         END
+
 
         -- Auto-select owner: TOP 1 active ORDER BY create_date
         SELECT TOP 1
@@ -88,12 +95,14 @@ BEGIN
         WHERE is_active = 1
         ORDER BY owner_id ASC;
 
+
         IF @v_int_owner_id IS NULL
         BEGIN
             SET @out_vch_error_code    = 'ERR_OWNER_NOT_FOUND';
             SET @out_vch_error_message = [sec].usf_get_resouce_value('STORED_PROCEDURE',@out_vch_error_code,@in_vch_lang,'@param1','@param2','@param3','@param4','@param5');
             RAISERROR(@out_vch_error_message, 16, 1);
         END
+
 
         -- Auto-select order_type จาก combobox group 'inbound_order_type'
         SELECT TOP 1 @v_vch_order_type = value_member
@@ -102,12 +111,14 @@ BEGIN
           AND is_active  = 1
         ORDER BY display_sequence ASC;
 
+
         IF @v_vch_order_type IS NULL
         BEGIN
             SET @out_vch_error_code    = 'ERR_ORDER_TYPE_NOT_FOUND';
             SET @out_vch_error_message = [sec].usf_get_resouce_value('STORED_PROCEDURE',@out_vch_error_code,@in_vch_lang,'@param1','@param2','@param3','@param4','@param5');
             RAISERROR(@out_vch_error_message, 16, 1);
         END
+
 
         -- Resolve item_number และ item controls จาก item_master_id
         SELECT @v_vch_item_number       = item_number,
@@ -118,6 +129,7 @@ BEGIN
         FROM [inv].[t_inv_item]
         WHERE item_master_id = @in_int_item_master_id;
 
+
         IF @v_vch_item_number IS NULL
         BEGIN
             SET @out_vch_error_code    = 'ERR_ITEM_NOT_FOUND';
@@ -125,14 +137,17 @@ BEGIN
             RAISERROR(@out_vch_error_message, 16, 1);
         END
 
+
         -- สร้าง inbound master + detail ใหม่ถ้าไม่ได้ส่ง master_id มา
         IF @in_int_inbound_master_id IS NULL
         BEGIN
             EXEC [inv].[usp_generate_inbound_number]
                 @out_vch_order_number = @v_vch_inbound_order_number OUTPUT;
 
+
             -- ใช้ NEXT VALUE FOR แทน SCOPE_IDENTITY() เพื่อความปลอดภัยใน multi-session
             SET @in_int_inbound_master_id = NEXT VALUE FOR [inv].[SEQInboundID];
+
 
             INSERT INTO [inv].[t_inv_inbound_master] (
                 inbound_master_id,
@@ -161,7 +176,9 @@ BEGIN
                 GETDATE()
             );
 
+
             SET @in_int_inbound_detail_id = NEXT VALUE FOR [inv].[SEQInboundID];
+
 
             -- Insert detail โดยดึง primary UOM จาก t_inv_item_uom
             INSERT INTO [inv].[t_inv_inbound_detail] (
@@ -187,7 +204,7 @@ BEGIN
                 @in_int_inbound_detail_id,
                 @in_int_inbound_master_id,
                 @v_vch_inbound_order_number,
-                '1',
+                '00001',
                 @in_int_item_master_id,
                 @v_vch_item_number,
                 @v_vch_item_description,
@@ -206,6 +223,7 @@ BEGIN
               AND primary_uom    = 1;
         END
 
+
         -- Auto-resolve inbound_detail_id ถ้าไม่ได้ส่งมา (หา line ที่ยังรับไม่ครบ)
         IF @in_int_inbound_detail_id IS NULL
         BEGIN
@@ -216,7 +234,7 @@ BEGIN
                 ON id.inbound_master_id = im.inbound_master_id
             WHERE id.inbound_master_id = @in_int_inbound_master_id
               AND id.item_master_id    = @in_int_item_master_id
-              AND im.order_status     <> 'CLOSE'
+              AND im.order_status     <> 'Closed'
               AND (id.quantity_order - ISNULL(id.quantity_received, 0)) > 0
             ORDER BY 
                 -- 1. Lot matching priority
@@ -242,6 +260,7 @@ BEGIN
                 END ASC,
                 id.inbound_detail_id ASC;
 
+
             IF @in_int_inbound_detail_id IS NULL
             BEGIN
                 SET @out_vch_error_code    = 'ERR_INBOUND_DETAIL_NOT_FOUND';
@@ -249,6 +268,7 @@ BEGIN
                 RAISERROR(@out_vch_error_message, 16, 1);
             END
         END
+
 
         -- Gather order and UOM data
         SELECT
@@ -277,6 +297,7 @@ BEGIN
             AND uom_input.uom            = @in_vch_uom
         WHERE im.inbound_master_id = @in_int_inbound_master_id;
 
+
         -- ดึง Base UOM ของ item
         SELECT TOP 1
             @v_vch_base_uom    = uom,
@@ -285,19 +306,22 @@ BEGIN
         WHERE item_master_id = @in_int_item_master_id
           AND primary_uom    = 1;
 
+
         -- ดึงชื่อ location ที่รับของ
         SELECT @v_vch_receipt_location = location
         FROM [inv].[t_inv_location]
         WHERE location_id = @in_int_receipt_location_id;
+
 
         -- คำนวณ qty เป็น base UOM
         SET @v_dec_base_qty   = @in_dec_qty * @v_dec_conv_factor;
         -- fallback inv_status: ใช้ค่าจาก detail ก่อน ถ้าไม่มีให้ใช้ 'Available'
         SET @v_vch_inv_status = ISNULL(@v_vch_inv_status, 'Available');
 
+
         -- Validation: ตรวจสอบเงื่อนไขทั้งหมดก่อนดำเนินการ
         SELECT @v_vch_error_code = CASE
-            WHEN @v_vch_order_status = 'CLOSE'                                                   THEN 'ERR_ORDER_CLOSED'
+            WHEN @v_vch_order_status = 'Closed'                                                  THEN 'ERR_ORDER_CLOSED'
             WHEN @v_bit_is_item_exist = 0                                                        THEN 'ERR_ITEM_NOT_IN_ORDER'
             WHEN @v_int_input_uom_id IS NULL                                                     THEN 'ERR_UOM_NOT_FOUND'
             WHEN @v_vch_lot_control = 'FULL' AND ISNULL(@in_vch_lot_number, '') = ''            THEN 'ERR_LOT_REQUIRED'
@@ -313,6 +337,7 @@ BEGIN
             ELSE 'SUCCESS'
         END;
 
+
         -- ตรวจ serial ซ้ำเพิ่มเติม (เฉพาะ FULL SN control และยังไม่มี error)
         IF @v_vch_sn_control = 'FULL' AND @v_vch_error_code = 'SUCCESS'
         BEGIN
@@ -322,8 +347,10 @@ BEGIN
             WHERE inv.item_master_id = @in_int_item_master_id
               AND invs.serial_number = @in_vch_serial_number;
 
+
             IF @v_int_serial_exists > 0 SET @v_vch_error_code = 'ERR_SERIAL_DUPLICATE';
         END
+
 
         IF @v_vch_error_code <> 'SUCCESS'
         BEGIN
@@ -332,14 +359,16 @@ BEGIN
             RAISERROR(@out_vch_error_message, 16, 1);
         END
 
+
         -- หา receipt header ที่ยังเปิดอยู่ ถ้าไม่มีให้สร้างใหม่
         SELECT TOP 1
             @v_int_receipt_header_id = receipt_header_id,
             @v_vch_receipt_number    = receipt_number
         FROM [inv].[t_inv_inbound_receipt_header]
         WHERE inbound_master_id = @in_int_inbound_master_id
-          AND receipt_status   <> 'CLOSED'
+          AND receipt_status   <> 'Closed'
         ORDER BY create_date DESC;
+
 
         IF @v_int_receipt_header_id IS NULL
         BEGIN
@@ -348,7 +377,9 @@ BEGIN
                 @in_vchInboundNumber    = @v_vch_inbound_order_number,
                 @out_vchReceiptNumber   = @v_vch_receipt_number OUTPUT;
 
+
             SET @v_int_receipt_header_id = NEXT VALUE FOR [inv].[SEQInboundID];
+
 
             INSERT INTO [inv].[t_inv_inbound_receipt_header] (
                 receipt_header_id,
@@ -364,11 +395,12 @@ BEGIN
                 @v_vch_receipt_number,
                 @in_int_inbound_master_id,
                 @v_vch_inbound_order_number,
-                'OPEN',
+                'Open',
                 @in_vch_user_id,
                 GETDATE()
             );
         END
+
 
         -- Insert receipt detail
         INSERT INTO [inv].[t_inv_inbound_receipt_detail] (
@@ -414,12 +446,14 @@ BEGIN
             GETDATE()
         );
 
+
         -- อัปเดตจำนวนที่รับแล้วใน inbound detail
         UPDATE [inv].[t_inv_inbound_detail]
         SET quantity_received = quantity_received + @v_dec_base_qty,
             update_by         = @in_vch_user_id,
             update_date       = GETDATE()
         WHERE inbound_detail_id = @in_int_inbound_detail_id;
+
 
         -- UPSERT inventory: เพิ่มจำนวนถ้ามีอยู่แล้ว / สร้างใหม่ถ้าไม่มี
         MERGE [inv].[t_inv_inventory] AS target
@@ -485,6 +519,7 @@ BEGIN
                 GETDATE()
             );
 
+
         -- Insert serial number (เฉพาะ item ที่ควบคุม SN แบบ FULL)
         IF @v_vch_sn_control = 'FULL'
         BEGIN
@@ -496,6 +531,7 @@ BEGIN
               AND item_master_id = @in_int_item_master_id
               AND ISNULL(lot_number,  '')           = ISNULL(@in_vch_lot_number,  '')
               AND ISNULL(expiry_date, '')           = ISNULL(@in_dt_expiry_date, '');
+
 
             INSERT INTO [inv].[t_inv_inventory_serial] (
                 inventory_id,
@@ -510,6 +546,7 @@ BEGIN
                 GETDATE()
             );
         END
+
 
         -- Transaction Log
         -- หมายเหตุ: location_id = after_location_id เพราะ Receipt คือการรับของเข้า
@@ -577,18 +614,22 @@ BEGIN
             GETDATE()
         );
 
+
         COMMIT TRANSACTION;
+
 
         SET @out_vch_inbound_order_number = @v_vch_inbound_order_number;
         SET @out_vch_error_code           = '0';
         -- ดึง success message จาก resource table (รองรับ multi-language)
         SET @out_vch_error_message        = [sec].usf_get_resouce_value('STORED_PROCEDURE','SAVE_SUCCESS',@in_vch_lang,'@param1','@param2','@param3','@param4','@param5');
 
+
     END TRY
     BEGIN CATCH
         IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
         SET @out_vch_error_code    = ISNULL(@out_vch_error_code, 'ERR_999');
         SET @out_vch_error_message = ERROR_MESSAGE();
+
 
         EXEC [inv].[usp_process_log]
              @in_vch_log_type        = 'STORED_PROCEDURE'  -- แก้จาก 'STORE_PROCEDURE'
