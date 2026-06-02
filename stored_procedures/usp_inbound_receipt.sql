@@ -1,4 +1,4 @@
-USE [MyInventory]
+﻿USE [MyInventory]
 GO
 
 SET ANSI_NULLS ON
@@ -19,8 +19,6 @@ ALTER PROCEDURE [inv].[usp_inbound_receipt]
     @in_dt_expiry_date           DATE          = NULL,
     @in_vch_serial_number         NVARCHAR(50)  = NULL,
     @in_int_receipt_location_id   INT,
-    @in_vch_inv_status            NVARCHAR(50)  = 'Available',
-    @in_vch_order_status          VARCHAR(20)   = 'OPEN',
     @in_vch_lang                  VARCHAR(20),
     @in_vch_user_id               NVARCHAR(50),
     @in_vch_device                NVARCHAR(50),
@@ -157,7 +155,7 @@ BEGIN
                 @v_int_owner_id,
                 @v_vch_owner_code,
                 @v_vch_order_type,
-                @in_vch_order_status,
+                'Receiving',
                 GETDATE(),
                 @in_vch_user_id,
                 GETDATE()
@@ -197,7 +195,7 @@ BEGIN
                 uom,
                 @in_dec_qty,
                 0,
-                @in_vch_inv_status,
+                'Available',
                 @in_vch_lot_number,
                 @in_dt_expiry_date,
                 @in_vch_serial_number,
@@ -220,7 +218,29 @@ BEGIN
               AND id.item_master_id    = @in_int_item_master_id
               AND im.order_status     <> 'CLOSE'
               AND (id.quantity_order - ISNULL(id.quantity_received, 0)) > 0
-            ORDER BY id.inbound_detail_id ASC;
+            ORDER BY 
+                -- 1. Lot matching priority
+                CASE 
+                    WHEN ISNULL(@in_vch_lot_number, '') <> '' AND id.lot_number = @in_vch_lot_number THEN 1
+                    WHEN ISNULL(@in_vch_lot_number, '') <> '' AND (id.lot_number IS NULL OR id.lot_number = '') THEN 2
+                    WHEN ISNULL(@in_vch_lot_number, '') = '' AND (id.lot_number IS NULL OR id.lot_number = '') THEN 1
+                    ELSE 3
+                END ASC,
+                -- 2. Expiry date matching priority
+                CASE 
+                    WHEN @in_dt_expiry_date IS NOT NULL AND id.expiry_date = @in_dt_expiry_date THEN 1
+                    WHEN @in_dt_expiry_date IS NOT NULL AND id.expiry_date IS NULL THEN 2
+                    WHEN @in_dt_expiry_date IS NULL AND id.expiry_date IS NULL THEN 1
+                    ELSE 3
+                END ASC,
+                -- 3. Serial number matching priority
+                CASE 
+                    WHEN ISNULL(@in_vch_serial_number, '') <> '' AND id.serial_number = @in_vch_serial_number THEN 1
+                    WHEN ISNULL(@in_vch_serial_number, '') <> '' AND (id.serial_number IS NULL OR id.serial_number = '') THEN 2
+                    WHEN ISNULL(@in_vch_serial_number, '') = '' AND (id.serial_number IS NULL OR id.serial_number = '') THEN 1
+                    ELSE 3
+                END ASC,
+                id.inbound_detail_id ASC;
 
             IF @in_int_inbound_detail_id IS NULL
             BEGIN
@@ -243,6 +263,7 @@ BEGIN
             @v_vch_warehouse            = im.warehouse,
             @v_int_owner_id             = im.owner_id,
             @v_vch_owner_code           = im.owner_code,
+            @v_vch_order_type           = im.order_type,
             @v_vch_inv_status           = id.inv_status,
             @v_int_input_uom_id         = uom_input.item_uom_id,
             @v_dec_conv_factor          = ISNULL(uom_input.conversion_factor, 1)
@@ -271,8 +292,8 @@ BEGIN
 
         -- คำนวณ qty เป็น base UOM
         SET @v_dec_base_qty   = @in_dec_qty * @v_dec_conv_factor;
-        -- fallback inv_status: ใช้ค่าจาก detail ก่อน ถ้าไม่มีให้ใช้ parameter
-        SET @v_vch_inv_status = ISNULL(@v_vch_inv_status, @in_vch_inv_status);
+        -- fallback inv_status: ใช้ค่าจาก detail ก่อน ถ้าไม่มีให้ใช้ 'Available'
+        SET @v_vch_inv_status = ISNULL(@v_vch_inv_status, 'Available');
 
         -- Validation: ตรวจสอบเงื่อนไขทั้งหมดก่อนดำเนินการ
         SELECT @v_vch_error_code = CASE
@@ -506,6 +527,7 @@ BEGIN
             after_location,
             item_master_id,
             item_number,
+            item_description,
             quantity,
             item_uom_id,
             uom,
@@ -517,6 +539,9 @@ BEGIN
             expiry_date,
             after_expiry_date,
             serial_number,
+            order_number,
+            reference_number,
+            order_type,
             create_by,
             create_date
         )
@@ -533,6 +558,7 @@ BEGIN
             @v_vch_receipt_location,
             @in_int_item_master_id,
             @v_vch_item_number,
+            @v_vch_item_description,
             @v_dec_base_qty,
             @v_int_base_uom_id,
             @v_vch_base_uom,
@@ -544,6 +570,9 @@ BEGIN
             @in_dt_expiry_date,
             @in_dt_expiry_date,
             @in_vch_serial_number,
+            @v_vch_inbound_order_number,
+            @v_vch_receipt_number,
+            @v_vch_order_type,
             @in_vch_user_id,
             GETDATE()
         );

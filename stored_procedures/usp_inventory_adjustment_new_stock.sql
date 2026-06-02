@@ -310,7 +310,7 @@ BEGIN
             remark
         )
         VALUES (
-            'ADJUSTMENT',
+            'INV_ADJUST',
             'ADJUST_IN',
             'Inventory adjustment - Add new stock',
             @v_int_warehouse_id,

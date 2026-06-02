@@ -1,4 +1,4 @@
-USE [MyInventory]
+﻿USE [MyInventory]
 GO
 
 SET ANSI_NULLS ON
@@ -23,8 +23,6 @@ ALTER PROCEDURE [inv].[usp_inbound_blind_receipt]
     @in_vch_serial_number         NVARCHAR(50)  = NULL,
     @in_int_receipt_location_id   INT,
     @in_int_receipt_header_id     BIGINT        = NULL,  -- NULL = หา/สร้างใหม่
-    @in_vch_inv_status            NVARCHAR(50)  = 'Available',
-    @in_vch_order_status          VARCHAR(20)   = 'OPEN',
     @in_vch_lang                  VARCHAR(20),
     @in_vch_user_id               NVARCHAR(50),
     @in_vch_device                NVARCHAR(50),
@@ -121,8 +119,8 @@ BEGIN
             SET @v_vch_order_type = 'Blind Receipt';
         END
 
-        -- Default inv_status ถ้าไม่ส่งมา
-        SET @v_vch_inv_status = ISNULL(@in_vch_inv_status, 'Available');
+        -- Default inv_status
+        SET @v_vch_inv_status = 'Available';
 
         -- สร้าง inbound master ใหม่ถ้าไม่ได้ส่งมา
         IF @in_int_inbound_master_id IS NULL
@@ -154,7 +152,7 @@ BEGIN
                 @v_int_owner_id,
                 @v_vch_owner_code,
                 @v_vch_order_type,
-                @in_vch_order_status,
+                'Receiving',
                 GETDATE(),
                 @in_vch_user_id,
                 GETDATE()
@@ -168,7 +166,8 @@ BEGIN
             @v_int_warehouse_id         = im.warehouse_id,
             @v_vch_warehouse            = im.warehouse,
             @v_int_owner_id             = im.owner_id,
-            @v_vch_owner_code           = im.owner_code
+            @v_vch_owner_code           = im.owner_code,
+            @v_vch_order_type           = im.order_type
         FROM [inv].[t_inv_inbound_master] im
         WHERE im.inbound_master_id = @in_int_inbound_master_id;
 
@@ -272,49 +271,67 @@ BEGIN
         -- 3. Data Operations (หลัง Validation ผ่านแล้วเท่านั้น)
         -- --------------------------------------------------------
 
-        -- 3.1 Create Inbound Detail (blind receipt สร้างใหม่ทุกครั้ง)
-        -- quantity_order = quantity_received เพราะ blind receipt ถือว่าของมาครบ
-        SET @v_int_inbound_detail_id = NEXT VALUE FOR [inv].[SEQInboundID];
+        -- 3.1 Upsert Inbound Detail
+        -- ถ้ามี detail ของ item เดียวกันใน order เดียวกันอยู่แล้ว → อัปเดต qty
+        -- ถ้ายังไม่มี → สร้างใหม่ (ไม่เก็บ lot/expiry/serial ใน detail)
+        SELECT TOP 1
+            @v_int_inbound_detail_id = inbound_detail_id
+        FROM [inv].[t_inv_inbound_detail]
+        WHERE inbound_master_id = @in_int_inbound_master_id
+          AND item_master_id    = @in_int_item_master_id
+        ORDER BY inbound_detail_id ASC;
 
-        INSERT INTO [inv].[t_inv_inbound_detail] (
-            inbound_detail_id,
-            inbound_master_id,
-            inbound_order_number,
-            line_number,
-            item_master_id,
-            item_number,
-            item_description,
-            item_uom_id,
-            uom,
-            quantity_order,
-            quantity_received,
-            inv_status,
-            lot_number,
-            expiry_date,
-            serial_number,
-            create_by,
-            create_date
-        )
-        VALUES (
-            @v_int_inbound_detail_id,
-            @in_int_inbound_master_id,
-            @v_vch_inbound_order_number,
-            '1',
-            @in_int_item_master_id,
-            @v_vch_item_number,
-            @v_vch_item_description,
-            @in_int_input_uom_id,
-            @v_vch_input_uom,
-            @v_dec_base_qty,
-            @v_dec_base_qty,
-            -- quantity_received = quantity_order สำหรับ blind receipt
-            @v_vch_inv_status,
-            @in_vch_lot_number,
-            @in_dt_expiry_date,
-            @in_vch_serial_number,
-            @in_vch_user_id,
-            GETDATE()
-        );
+        IF @v_int_inbound_detail_id IS NOT NULL
+        BEGIN
+            -- อัปเดต qty ใน detail เดิม
+            UPDATE [inv].[t_inv_inbound_detail]
+            SET quantity_order    = quantity_order    + @v_dec_base_qty,
+                quantity_received = quantity_received + @v_dec_base_qty,
+                update_by         = @in_vch_user_id,
+                update_date       = GETDATE()
+            WHERE inbound_detail_id = @v_int_inbound_detail_id;
+        END
+        ELSE
+        BEGIN
+            -- สร้าง detail ใหม่ (ไม่เก็บ lot / expiry / serial)
+            SET @v_int_inbound_detail_id = NEXT VALUE FOR [inv].[SEQInboundID];
+
+            INSERT INTO [inv].[t_inv_inbound_detail] (
+                inbound_detail_id,
+                inbound_master_id,
+                inbound_order_number,
+                line_number,
+                item_master_id,
+                item_number,
+                item_description,
+                item_uom_id,
+                uom,
+                quantity_order,
+                quantity_received,
+                inv_status,
+                create_by,
+                create_date
+            )
+            SELECT
+                @v_int_inbound_detail_id,
+                @in_int_inbound_master_id,
+                @v_vch_inbound_order_number,
+                '1',
+                @in_int_item_master_id,
+                @v_vch_item_number,
+                @v_vch_item_description,
+                item_uom_id,
+                uom,
+                @v_dec_base_qty,
+                @v_dec_base_qty,
+                -- quantity_received = quantity_order สำหรับ blind receipt
+                @v_vch_inv_status,
+                @in_vch_user_id,
+                GETDATE()
+            FROM [inv].[t_inv_item_uom]
+            WHERE item_master_id = @in_int_item_master_id
+              AND primary_uom    = 1;
+        END
 
         -- 3.2 Ensure Receipt Header (ใช้ค่าที่รับมาก่อน ถ้าไม่มีให้หาหรือสร้างใหม่)
         SET @v_int_receipt_header_id = @in_int_receipt_header_id;
@@ -441,6 +458,7 @@ BEGIN
                 @v_vch_receipt_location     AS location,
                 @in_int_item_master_id      AS item_master_id,
                 @v_vch_item_number          AS item_number,
+                @v_vch_item_description     AS item_description,
                 @v_vch_inv_status           AS inv_status,
                 @in_vch_lot_number          AS lot_number,
                 @in_dt_expiry_date         AS expiry_date
@@ -454,9 +472,10 @@ BEGIN
             AND ISNULL(target.inv_status,  '')           = ISNULL(source.inv_status,  '')
         WHEN MATCHED THEN
             UPDATE SET
-                quantity    = ISNULL(target.quantity, 0) + @v_dec_base_qty,
-                update_by   = @in_vch_user_id,
-                update_date = GETDATE()
+                quantity         = ISNULL(target.quantity, 0) + @v_dec_base_qty,
+                item_description = source.item_description,
+                update_by        = @in_vch_user_id,
+                update_date      = GETDATE()
         WHEN NOT MATCHED THEN
             INSERT (
                 warehouse_id,
@@ -467,6 +486,7 @@ BEGIN
                 location,
                 item_master_id,
                 item_number,
+                item_description,
                 quantity,
                 inv_status,
                 lot_number,
@@ -484,6 +504,7 @@ BEGIN
                 source.location,
                 source.item_master_id,
                 source.item_number,
+                source.item_description,
                 @v_dec_base_qty,
                 source.inv_status,
                 source.lot_number,
@@ -532,64 +553,7 @@ BEGIN
             );
         END
 
-        -- 3.6 Transaction Log
-        -- หมายเหตุ: location_id = after_location_id เพราะ Receipt คือการรับของเข้า
-        -- ของเข้าสู่ระบบที่ location นี้โดยตรง จึงไม่มี "before location"
-        INSERT INTO [inv].[t_inv_tran_log] (
-            tran_type,
-            sub_tran_type,
-            warehouse_id,
-            warehouse,
-            owner_id,
-            owner_code,
-            location_id,
-            location,
-            after_location_id,
-            after_location,
-            item_master_id,
-            item_number,
-            quantity,
-            item_uom_id,
-            uom,
-            inv_status,
-            after_inv_status,
-            receive_date,
-            lot_number,
-            after_lot_number,
-            expiry_date,
-            after_expiry_date,
-            serial_number,
-            create_by,
-            create_date
-        )
-        VALUES (
-            'IO_RECEIPT',
-            'BLIND_RECEIPT',
-            @v_int_warehouse_id,
-            @v_vch_warehouse,
-            @v_int_owner_id,
-            @v_vch_owner_code,
-            @in_int_receipt_location_id,
-            @v_vch_receipt_location,
-            @in_int_receipt_location_id,
-            @v_vch_receipt_location,
-            @in_int_item_master_id,
-            @v_vch_item_number,
-            @v_dec_base_qty,
-            @v_int_base_uom_id,
-            @v_vch_base_uom,
-            @v_vch_inv_status,
-            @v_vch_inv_status,
-            CAST(GETDATE() AS DATE),
-            @in_vch_lot_number,
-            @in_vch_lot_number,
-            @in_dt_expiry_date,
-            @in_dt_expiry_date,
-            @in_vch_serial_number,
-            @in_vch_user_id,
-            GETDATE()
-        );
-
+      
         COMMIT TRANSACTION;
 
         SET @out_vch_inbound_order_number = @v_vch_inbound_order_number;

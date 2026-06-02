@@ -439,7 +439,7 @@ BEGIN
             remark
         )
         VALUES (
-            'ADJUSTMENT',
+            'INV_ADJUST',
             @in_vch_adj_type,
             'Inventory adjustment',
             @v_int_warehouse_id,
