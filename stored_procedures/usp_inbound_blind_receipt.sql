@@ -1,4 +1,4 @@
-﻿USE [MyInventory]
+USE [MyInventory]
 
 GO
 
@@ -1129,6 +1129,135 @@ BEGIN
 
 
       
+
+
+
+        -- 3.6 Transaction Log
+        -- หมายเหตุ: location_id = after_location_id เพราะ Blind Receipt คือการรับของเข้า
+        -- ของเข้าสู่ระบบที่ location นี้โดยตรง จึงไม่มี "before location"
+        INSERT INTO [inv].[t_inv_tran_log] (
+
+            tran_type,
+
+            sub_tran_type,
+
+            warehouse_id,
+
+            warehouse,
+
+            owner_id,
+
+            owner_code,
+
+            location_id,
+
+            location,
+
+            after_location_id,
+
+            after_location,
+
+            item_master_id,
+
+            item_number,
+
+            item_description,
+
+            quantity,
+
+            item_uom_id,
+
+            uom,
+
+            inv_status,
+
+            after_inv_status,
+
+            receive_date,
+
+            lot_number,
+
+            after_lot_number,
+
+            expiry_date,
+
+            after_expiry_date,
+
+            serial_number,
+
+            order_number,
+
+            reference_number,
+
+            order_type,
+
+            create_by,
+
+            create_date
+
+        )
+
+        VALUES (
+
+            'IO_RECEIPT',
+
+            'BLIND_RECEIPT',
+
+            @v_int_warehouse_id,
+
+            @v_vch_warehouse,
+
+            @v_int_owner_id,
+
+            @v_vch_owner_code,
+
+            @in_int_receipt_location_id,
+
+            @v_vch_receipt_location,
+
+            @in_int_receipt_location_id,
+
+            @v_vch_receipt_location,
+
+            @in_int_item_master_id,
+
+            @v_vch_item_number,
+
+            @v_vch_item_description,
+
+            @v_dec_base_qty,
+
+            @v_int_base_uom_id,
+
+            @v_vch_base_uom,
+
+            @v_vch_inv_status,
+
+            @v_vch_inv_status,
+
+            CAST(GETDATE() AS DATE),
+
+            @in_vch_lot_number,
+
+            @in_vch_lot_number,
+
+            @in_dt_expiry_date,
+
+            @in_dt_expiry_date,
+
+            @in_vch_serial_number,
+
+            @v_vch_inbound_order_number,
+
+            @v_vch_receipt_number,
+
+            @v_vch_order_type,
+
+            @in_vch_user_id,
+
+            GETDATE()
+
+        );
 
 
 
