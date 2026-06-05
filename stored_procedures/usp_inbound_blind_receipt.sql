@@ -1185,11 +1185,15 @@ BEGIN
 
             serial_number,
 
+            line_number,
+
             order_number,
 
             reference_number,
 
             order_type,
+
+            device,
 
             create_by,
 
@@ -1247,11 +1251,15 @@ BEGIN
 
             @in_vch_serial_number,
 
+            @v_vch_next_line_number,
+
             @v_vch_inbound_order_number,
 
             @v_vch_receipt_number,
 
             @v_vch_order_type,
+
+            @in_vch_device,
 
             @in_vch_user_id,
 

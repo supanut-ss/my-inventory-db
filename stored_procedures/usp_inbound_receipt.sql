@@ -1,4 +1,4 @@
-﻿USE [MyInventory]
+USE [MyInventory]
 GO
 
 
@@ -63,7 +63,8 @@ BEGIN
         @v_dt_process_start           DATETIME = GETDATE(),
         @v_int_receipt_header_id      BIGINT,
         @v_vch_receipt_number         NVARCHAR(50),
-        @v_vch_item_description       NVARCHAR(255);
+        @v_vch_item_description       NVARCHAR(255),
+        @v_vch_line_number            VARCHAR(10);
 
 
     BEGIN TRY
@@ -551,6 +552,12 @@ BEGIN
         -- Transaction Log
         -- หมายเหตุ: location_id = after_location_id เพราะ Receipt คือการรับของเข้า
         -- ของเข้าสู่ระบบที่ location นี้โดยตรง จึงไม่มี "before location"
+
+        -- ดึง line_number จาก inbound_detail เพื่อบันทึกลง tran_log
+        SELECT @v_vch_line_number = line_number
+        FROM [inv].[t_inv_inbound_detail]
+        WHERE inbound_detail_id = @in_int_inbound_detail_id;
+
         INSERT INTO [inv].[t_inv_tran_log] (
             tran_type,
             sub_tran_type,
@@ -576,9 +583,11 @@ BEGIN
             expiry_date,
             after_expiry_date,
             serial_number,
+            line_number,
             order_number,
             reference_number,
             order_type,
+            device,
             create_by,
             create_date
         )
@@ -607,9 +616,11 @@ BEGIN
             @in_dt_expiry_date,
             @in_dt_expiry_date,
             @in_vch_serial_number,
+            @v_vch_line_number,
             @v_vch_inbound_order_number,
             @v_vch_receipt_number,
             @v_vch_order_type,
+            @in_vch_device,
             @in_vch_user_id,
             GETDATE()
         );
