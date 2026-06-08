@@ -83,6 +83,7 @@ BEGIN
         @v_vch_uom                      NVARCHAR(10),
         -- Inventory Detail
         @v_dec_source_qty               DECIMAL(18, 4),
+        @v_dec_source_unallocated_qty   DECIMAL(18, 4),
         @v_vch_inv_status               NVARCHAR(50),
         @v_dt_receive_date              DATE,
         @v_vch_lot_number               NVARCHAR(50),
@@ -142,8 +143,9 @@ BEGIN
             @v_int_item_master_id       = inv.item_master_id,
             @v_vch_item_number          = inv.item_number,
             @v_vch_item_description     = inv.item_description,
-            @v_dec_source_qty           = inv.quantity,
-            @v_vch_inv_status           = inv.inv_status,
+            @v_dec_source_qty             = inv.quantity,
+            @v_dec_source_unallocated_qty = inv.quantity - ISNULL(inv.quantity_allocated, 0),
+            @v_vch_inv_status             = inv.inv_status,
             @v_dt_receive_date         = inv.receive_date,
             @v_vch_lot_number           = inv.lot_number,
             @v_dt_expiry_date          = inv.expiry_date
@@ -190,6 +192,8 @@ BEGIN
                 THEN 'ERR_INVALID_QTY'                  -- จำนวนต้องมากกว่า 0
             WHEN @in_dec_qty > @v_dec_source_qty
                 THEN 'ERR_QTY_EXCEEDS_AVAILABLE'        -- จำนวนเกิน qty คงเหลือ
+            WHEN @in_dec_qty > @v_dec_source_unallocated_qty
+                THEN 'ERR_QTY_ALLOCATED'                -- ติด allocated
             ELSE 'SUCCESS'
         END;
 
@@ -210,6 +214,17 @@ BEGIN
         BEGIN
             SET @out_vch_error_code    = @v_vch_error_code;
             SET @out_vch_error_message = [sec].usf_get_resouce_value('STORED_PROCEDURE', @out_vch_error_code, @in_vch_lang, '@param1', '@param2', '@param3', '@param4', '@param5');
+            
+            -- Fallback message if not defined in resource table
+            IF @out_vch_error_message IS NULL OR @out_vch_error_message = ''
+            BEGIN
+                SET @out_vch_error_message = CASE 
+                    WHEN @out_vch_error_code = 'ERR_QTY_ALLOCATED' 
+                        THEN CASE WHEN @in_vch_lang = 'TH' THEN N'ไม่สามารถย้ายสินค้าได้เนื่องจากสินค้าติด Allocated' ELSE 'Cannot move because the quantity is allocated.' END
+                    ELSE @out_vch_error_code
+                END;
+            END
+
             RAISERROR(@out_vch_error_message, 16, 1);
         END
 

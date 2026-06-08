@@ -79,7 +79,9 @@ BEGIN
         -- Inventory Detail
         @v_dec_current_qty              DECIMAL(18, 4),
         @v_dec_available_qty            DECIMAL(18, 4),
+        @v_dec_unallocated_qty          DECIMAL(18, 4),
         @v_dec_remaining_qty            DECIMAL(18, 4),
+        @v_dec_current_row_actual_qty   DECIMAL(18, 4),
         @v_dec_adjust_qty               DECIMAL(18, 4),
         @v_int_current_inventory_id     BIGINT,
         @v_dec_current_row_qty          DECIMAL(18, 4),
@@ -186,7 +188,8 @@ BEGIN
         IF @in_vch_adj_type = 'ADJUST_OUT'
         BEGIN
             SELECT
-                @v_dec_available_qty = ISNULL(SUM(inv.quantity), 0)
+                @v_dec_available_qty   = ISNULL(SUM(inv.quantity), 0),
+                @v_dec_unallocated_qty = ISNULL(SUM(inv.quantity - ISNULL(inv.quantity_allocated, 0)), 0)
             FROM [inv].[t_inv_inventory] inv
             WHERE inv.warehouse_id    = @v_int_warehouse_id
               AND inv.owner_id        = @v_int_owner_id
@@ -208,7 +211,8 @@ BEGIN
         END
         ELSE
         BEGIN
-            SET @v_dec_available_qty = @v_dec_current_qty;
+            SET @v_dec_available_qty   = @v_dec_current_qty;
+            SET @v_dec_unallocated_qty = @v_dec_current_qty;
         END
 
         -- ============================================================
@@ -223,6 +227,8 @@ BEGIN
                 THEN 'ERR_INVALID_QTY'                      -- จำนวนต้องมากกว่า 0
             WHEN @in_vch_adj_type = 'ADJUST_OUT' AND @in_dec_qty > ISNULL(@v_dec_available_qty, 0)
                 THEN 'ERR_QTY_EXCEEDS_AVAILABLE'            -- ADJUST_OUT เกิน qty คงเหลือ
+            WHEN @in_vch_adj_type = 'ADJUST_OUT' AND @in_dec_qty > ISNULL(@v_dec_unallocated_qty, 0)
+                THEN 'ERR_QTY_ALLOCATED'                    -- ติด allocated
             WHEN @v_vch_lot_control = 'FULL' AND ISNULL(@in_vch_lot_number, '') = ''
                 THEN 'ERR_LOT_REQUIRED'                     -- item ต้องการ lot แต่ไม่ได้ส่งมา
             WHEN @v_vch_lot_control = 'NONE' AND ISNULL(@in_vch_lot_number, '') <> ''
@@ -280,6 +286,17 @@ BEGIN
         BEGIN
             SET @out_vch_error_code    = @v_vch_error_code;
             SET @out_vch_error_message = [sec].usf_get_resouce_value('STORED_PROCEDURE', @out_vch_error_code, @in_vch_lang, '@param1', '@param2', '@param3', '@param4', '@param5');
+            
+            -- Fallback message if not defined in resource table
+            IF @out_vch_error_message IS NULL OR @out_vch_error_message = ''
+            BEGIN
+                SET @out_vch_error_message = CASE 
+                    WHEN @out_vch_error_code = 'ERR_QTY_ALLOCATED' 
+                        THEN CASE WHEN @in_vch_lang = 'TH' THEN N'ไม่สามารถปรับยอดออกได้เนื่องจากสินค้าติด Allocated' ELSE 'Cannot adjust out because the quantity is allocated.' END
+                    ELSE @out_vch_error_code
+                END;
+            END
+
             RAISERROR(@out_vch_error_message, 16, 1);
         END
 
@@ -304,15 +321,16 @@ BEGIN
                 SET @v_int_current_inventory_id = NULL;
 
                 SELECT TOP 1
-                    @v_int_current_inventory_id = inv.inventory_id,
-                    @v_dec_current_row_qty      = inv.quantity,
-                    @v_dt_current_receive_date = inv.receive_date
+                    @v_int_current_inventory_id   = inv.inventory_id,
+                    @v_dec_current_row_qty        = inv.quantity - ISNULL(inv.quantity_allocated, 0),
+                    @v_dec_current_row_actual_qty = inv.quantity,
+                    @v_dt_current_receive_date   = inv.receive_date
                 FROM [inv].[t_inv_inventory] inv
                 WHERE inv.warehouse_id    = @v_int_warehouse_id
                   AND inv.owner_id        = @v_int_owner_id
                   AND inv.location_id     = @v_int_location_id
                   AND inv.item_master_id  = @v_int_item_master_id
-                  AND inv.quantity        > 0
+                  AND inv.quantity - ISNULL(inv.quantity_allocated, 0) > 0
                   AND ISNULL(inv.inv_status,  '')           = ISNULL(@v_vch_inv_status,  '')
                   AND ISNULL(inv.lot_number,  '')           = ISNULL(@in_vch_lot_number, '')
                   AND ISNULL(inv.expiry_date, '')           = ISNULL(@in_dt_expiry_date, '')
@@ -357,7 +375,8 @@ BEGIN
                       AND serial_number = @in_vch_serial_number;
                 END
 
-                IF (@v_dec_current_row_qty - @v_dec_adjust_qty) = 0
+                -- ลบรายการเมื่อยอดคงเหลือจริงเป็น 0 (ไม่ใช่ยอด unallocated)
+                IF (@v_dec_current_row_actual_qty - @v_dec_adjust_qty) = 0
                 BEGIN
                     DELETE FROM [inv].[t_inv_inventory_serial]
                     WHERE inventory_id = @v_int_current_inventory_id;
@@ -439,7 +458,7 @@ BEGIN
             remark
         )
         VALUES (
-            'ADJUSTMENT',
+            'INV_ADJUST',
             @in_vch_adj_type,
             'Inventory adjustment',
             @v_int_warehouse_id,
