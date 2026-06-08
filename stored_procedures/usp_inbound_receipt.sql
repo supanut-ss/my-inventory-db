@@ -58,6 +58,7 @@ BEGIN
         @v_vch_receipt_location       NVARCHAR(50),
         @v_vch_inv_status             NVARCHAR(50),
         @v_int_input_uom_id           INT,
+        @v_int_item_plan_count        INT,
         @v_int_inventory_id           BIGINT,
         @v_dt_process_start           DATETIME = GETDATE(),
         @v_int_receipt_header_id      BIGINT,
@@ -211,6 +212,18 @@ BEGIN
         -- Auto-resolve inbound_detail_id ถ้าไม่ได้ส่งมา (หา line ที่ยังรับไม่ครบ)
         IF @in_int_inbound_detail_id IS NULL
         BEGIN
+            SELECT @v_int_item_plan_count = COUNT(*)
+            FROM [inv].[t_inv_inbound_detail]
+            WHERE inbound_master_id = @in_int_inbound_master_id
+              AND item_master_id    = @in_int_item_master_id;
+
+            IF @v_int_item_plan_count = 0
+            BEGIN
+                SET @out_vch_error_code    = 'ERR_ITEM_NOT_IN_ORDER';
+                SET @out_vch_error_message = [sec].usf_get_resouce_value('STORED_PROCEDURE',@out_vch_error_code,@in_vch_lang,'@param1','@param2','@param3','@param4','@param5');
+                RAISERROR(@out_vch_error_message, 16, 1);
+            END
+
             SELECT TOP 1
                 @in_int_inbound_detail_id = id.inbound_detail_id
             FROM [inv].[t_inv_inbound_detail] id
@@ -224,7 +237,7 @@ BEGIN
 
             IF @in_int_inbound_detail_id IS NULL
             BEGIN
-                SET @out_vch_error_code    = 'ERR_INBOUND_DETAIL_NOT_FOUND';
+                SET @out_vch_error_code    = 'ERR_QTY_EXCEEDS_PLAN';
                 SET @out_vch_error_message = [sec].usf_get_resouce_value('STORED_PROCEDURE',@out_vch_error_code,@in_vch_lang,'@param1','@param2','@param3','@param4','@param5');
                 RAISERROR(@out_vch_error_message, 16, 1);
             END
@@ -277,6 +290,7 @@ BEGIN
         -- Validation: ตรวจสอบเงื่อนไขทั้งหมดก่อนดำเนินการ
         SELECT @v_vch_error_code = CASE
             WHEN @v_vch_order_status = 'CLOSE'                                                   THEN 'ERR_ORDER_CLOSED'
+            WHEN ISNULL(@in_dec_qty, 0) <= 0                                                     THEN 'ERR_INVALID_QTY'
             WHEN @v_bit_is_item_exist = 0                                                        THEN 'ERR_ITEM_NOT_IN_ORDER'
             WHEN @v_int_input_uom_id IS NULL                                                     THEN 'ERR_UOM_NOT_FOUND'
             WHEN @v_vch_lot_control = 'FULL' AND ISNULL(@in_vch_lot_number, '') = ''            THEN 'ERR_LOT_REQUIRED'
@@ -360,6 +374,7 @@ BEGIN
             receipt_location,
             item_master_id,
             item_number,
+            item_description,
             quantity_received,
             item_uom_id,
             uom,
@@ -381,6 +396,7 @@ BEGIN
             @v_vch_receipt_location,
             @in_int_item_master_id,
             @v_vch_item_number,
+            @v_vch_item_description,
             @v_dec_base_qty,
             @v_int_base_uom_id,
             @v_vch_base_uom,
@@ -399,6 +415,14 @@ BEGIN
             update_by         = @in_vch_user_id,
             update_date       = GETDATE()
         WHERE inbound_detail_id = @in_int_inbound_detail_id;
+
+                -- เปลี่ยนสถานะ order เป็น RECEIVING เมื่อมีการรับจริงครั้งแรก
+                UPDATE [inv].[t_inv_inbound_master]
+                SET order_status = 'RECEIVING',
+                        update_by    = @in_vch_user_id,
+                        update_date  = GETDATE()
+                WHERE inbound_master_id = @in_int_inbound_master_id
+                    AND ISNULL(order_status, 'OPEN') NOT IN ('RECEIVING', 'CLOSE');
 
         -- UPSERT inventory: เพิ่มจำนวนถ้ามีอยู่แล้ว / สร้างใหม่ถ้าไม่มี
         MERGE [inv].[t_inv_inventory] AS target

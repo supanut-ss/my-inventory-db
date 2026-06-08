@@ -11,6 +11,7 @@ GO
 -- ============================================================
 CREATE OR ALTER PROCEDURE [inv].[usp_inbound_close_receipt]
     @in_int_inbound_master_id BIGINT,
+    @in_vch_close_remark      NVARCHAR(255) = NULL,
     @in_vch_lang              VARCHAR(20),
     @in_vch_user_id           NVARCHAR(50),
     @in_vch_device            NVARCHAR(50),
@@ -108,9 +109,12 @@ BEGIN
         -- ============================================================
         UPDATE [inv].[t_inv_inbound_master]
         SET
-            order_status = 'CLOSE',
-            close_by    = @in_vch_user_id,
-            close_date  = GETDATE()
+            order_status  = 'CLOSE',
+            close_by      = @in_vch_user_id,
+            close_date    = GETDATE(),
+            close_remark  = @in_vch_close_remark,
+            update_by     = @in_vch_user_id,
+            update_date   = GETDATE()
         WHERE inbound_master_id = @in_int_inbound_master_id;
         -- ============================================================
         -- Transaction Log
@@ -125,9 +129,14 @@ BEGIN
             item_master_id,
             item_number,
             item_description,
+            line_number,
             quantity,
             inv_status,
             after_inv_status,
+            lot_number,
+            after_lot_number,
+            expiry_date,
+            after_expiry_date,
             order_number,
             reference_number,
             order_type,
@@ -147,9 +156,14 @@ BEGIN
             d.item_master_id,
             d.item_number,
             d.item_description,
+            d.line_number,
             d.quantity_received,
             d.inv_status,
             'CLOSE',
+            d.lot_number,
+            d.lot_number,
+            d.expiry_date,
+            d.expiry_date,
             im.inbound_order_number,
             rh.receipt_number,
             im.order_type,

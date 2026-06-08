@@ -230,6 +230,7 @@ BEGIN
         SELECT @v_vch_error_code = CASE
             WHEN @v_vch_order_status IS NULL                                             THEN 'ERR_INBOUND_ORDER_NOT_FOUND'
             WHEN @v_vch_order_status = 'CLOSE'                                           THEN 'ERR_ORDER_CLOSED'
+            WHEN ISNULL(@in_dec_qty, 0) <= 0                                             THEN 'ERR_INVALID_QTY'
             WHEN @v_vch_item_number IS NULL                                              THEN 'ERR_ITEM_NOT_FOUND'
             WHEN @v_vch_input_uom IS NULL                                                THEN 'ERR_UOM_NOT_FOUND'
             WHEN @v_vch_base_uom IS NULL                                                 THEN 'ERR_BASE_UOM_NOT_FOUND'
@@ -428,6 +429,14 @@ BEGIN
             @in_vch_user_id,
             GETDATE()
         );
+
+                -- เปลี่ยนสถานะ order เป็น RECEIVING เมื่อมีการรับจริงครั้งแรก
+                UPDATE [inv].[t_inv_inbound_master]
+                SET order_status = 'RECEIVING',
+                        update_by    = @in_vch_user_id,
+                        update_date  = GETDATE()
+                WHERE inbound_master_id = @in_int_inbound_master_id
+                    AND ISNULL(order_status, 'OPEN') NOT IN ('RECEIVING', 'CLOSE');
 
         -- 3.4 Merge Inventory (UPSERT: เพิ่มจำนวนถ้ามีอยู่แล้ว / สร้างใหม่ถ้าไม่มี)
         MERGE [inv].[t_inv_inventory] AS target
