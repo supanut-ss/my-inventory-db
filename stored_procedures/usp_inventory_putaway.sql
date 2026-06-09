@@ -42,7 +42,8 @@ CREATE OR ALTER PROCEDURE [inv].[usp_inventory_putaway]
     @in_int_target_location_id      INT            = NULL,     -- Location ID ปลายทาง (NULL = resolve จาก @in_vch_target_location)
     @in_vch_target_location         NVARCHAR(50)   = NULL,     -- Location code ปลายทาง (ใช้เมื่อไม่มี target_location_id)
 
-    -- ── 6. Remark / Remark ────────────────────────────────────
+    -- ── 6. Reference / Remark ──────────────────────────────────
+    @in_vch_reference_number        NVARCHAR(100)  = NULL,     -- Reference number (บันทึกลง tran_log, NULL ได้)
     @in_vch_remark                  NVARCHAR(200)  = NULL,     -- หมายเหตุการย้าย (บันทึกลง tran_log)
 
     -- ── 7. Context: Lang / Device / User ─────────────────────
@@ -385,6 +386,7 @@ BEGIN
             expiry_date,
             after_expiry_date,
             serial_number,
+            reference_number,
             device,
             create_by,
             create_date,
@@ -420,6 +422,7 @@ BEGIN
             @v_dt_expiry_date,
             -- expiry ไม่เปลี่ยน
             @in_vch_serial_number,
+            @in_vch_reference_number,
             @in_vch_device,
             @in_vch_user_id,
             GETDATE(),
