@@ -350,9 +350,11 @@ BEGIN
 
                 IF @v_int_current_inventory_id IS NULL
                 BEGIN
-                    SET @v_vch_error_code = 'ERR_QTY_EXCEEDS_AVAILABLE';
+                    SET @v_vch_error_code      = 'ERR_QTY_EXCEEDS_AVAILABLE';
                     SET @out_vch_error_code    = @v_vch_error_code;
                     SET @out_vch_error_message = [sec].usf_get_resouce_value('STORED_PROCEDURE', @out_vch_error_code, @in_vch_lang, '@param1', '@param2', '@param3', '@param4', '@param5');
+                    IF @out_vch_error_message IS NULL OR @out_vch_error_message = ''
+                        SET @out_vch_error_message = @out_vch_error_code;
                     RAISERROR(@out_vch_error_message, 16, 1);
                 END
 

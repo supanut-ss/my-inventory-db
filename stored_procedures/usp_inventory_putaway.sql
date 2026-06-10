@@ -41,6 +41,8 @@ CREATE OR ALTER PROCEDURE [inv].[usp_inventory_putaway]
     @in_dec_qty                     DECIMAL(18, 4),            -- จำนวนที่ต้องการย้าย (รองรับ partial put away)
     @in_int_target_location_id      INT            = NULL,     -- Location ID ปลายทาง (NULL = resolve จาก @in_vch_target_location)
     @in_vch_target_location         NVARCHAR(50)   = NULL,     -- Location code ปลายทาง (ใช้เมื่อไม่มี target_location_id)
+    @in_vch_tran_type               NVARCHAR(50)   = NULL,     -- Tran type สำหรับบันทึกลง tran_log (NULL/'' = PUT_AWAY)
+    @in_vch_sub_tran_type           NVARCHAR(50)   = NULL,     -- Sub tran type สำหรับบันทึกลง tran_log (NULL/'' = PUT_AWAY)
 
     -- ── 6. Reference / Remark ──────────────────────────────────
     @in_vch_reference_id            NVARCHAR(50)  = NULL,     -- Reference number (บันทึกลง tran_log, NULL ได้)
@@ -238,14 +240,6 @@ BEGIN
             update_date = GETDATE()
         WHERE inventory_id = @in_int_inventory_id;
 
-        -- ถ้า qty เหลือ 0 → ลบ source inventory row
-        -- (serial จะถูก reassign ใน STEP 5 ก่อนที่ row นี้ถูกลบผ่าน FK cascade หรือหลัง reassign)
-        IF (@v_dec_source_qty - @in_dec_qty) = 0
-        BEGIN
-            DELETE FROM [inv].[t_inv_inventory]
-            WHERE inventory_id = @in_int_inventory_id;
-        END
-
         -- ============================================================
         -- STEP 4: MERGE เข้า Target Inventory
         --         ถ้ามี record ที่ตรงกัน (warehouse+owner+location+item+status+lot+expiry+receive_date) → UPDATE qty
@@ -350,8 +344,29 @@ BEGIN
             WHERE inventory_id = @in_int_inventory_id
               AND (
                     @in_vch_serial_number IS NULL
+                    OR (@v_dec_source_qty - @in_dec_qty) = 0
                     OR serial_number = @in_vch_serial_number
                   );
+        END
+
+        -- ถ้า qty เหลือ 0 → ลบ source inventory row (หลังย้าย serial แล้ว)
+        IF (@v_dec_source_qty - @in_dec_qty) = 0
+        BEGIN
+            IF EXISTS (
+                SELECT 1
+                FROM [inv].[t_inv_inventory_serial]
+                WHERE inventory_id = @in_int_inventory_id
+            )
+            BEGIN
+                SET @out_vch_error_code    = 'ERR_SERIAL_REMAINING';
+                SET @out_vch_error_message = [sec].usf_get_resouce_value('STORED_PROCEDURE', @out_vch_error_code, @in_vch_lang, '@param1', '@param2', '@param3', '@param4', '@param5');
+                IF @out_vch_error_message IS NULL OR @out_vch_error_message = ''
+                    SET @out_vch_error_message = @out_vch_error_code;
+                RAISERROR(@out_vch_error_message, 16, 1);
+            END
+
+            DELETE FROM [inv].[t_inv_inventory]
+            WHERE inventory_id = @in_int_inventory_id;
         END
 
         -- ============================================================
@@ -393,8 +408,8 @@ BEGIN
             remark
         )
         VALUES (
-            'PUT_AWAY',
-            'PUT_AWAY',
+            ISNULL(NULLIF(@in_vch_tran_type, ''), 'PUT_AWAY'),
+            ISNULL(NULLIF(@in_vch_sub_tran_type, ''), 'PUT_AWAY'),
             @v_int_warehouse_id,
             @v_vch_warehouse,
             @v_int_owner_id,
