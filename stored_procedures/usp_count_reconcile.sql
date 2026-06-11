@@ -367,6 +367,16 @@ BEGIN
             );
         END
 
+        -- ============================================================
+        -- STEP 8: Update count master status to 'Counting'
+        -- ============================================================
+        UPDATE [inv].[t_inv_count_master]
+        SET count_status = 'Counting',
+            update_by    = @in_vch_user_id,
+            update_date  = GETDATE()
+        WHERE count_master_id = @in_int_count_master_id
+          AND ISNULL(count_status, 'Open') NOT IN ('Counting', 'Closed');
+
         -- Commit transaction และ set success output
         COMMIT TRANSACTION;
         SET @out_vch_error_code    = '0';
