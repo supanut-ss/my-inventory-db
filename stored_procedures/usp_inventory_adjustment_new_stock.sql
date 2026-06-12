@@ -82,9 +82,14 @@ BEGIN
         @v_int_serial_exists            INT,
         @v_dt_receive_date             DATE,
         -- Process Tracking
-        @v_dt_process_start             DATETIME      = GETDATE();
+        @v_dt_process_start             DATETIME      = GETDATE(),
+        @Round                          INT = 4;
 
     BEGIN TRY
+        SELECT TOP 1 @Round = value FROM inv.t_inv_rule WITH (NOLOCK) WHERE rule_code = 'DECIMAL_ROUNDING_RULE' AND is_active = 1;
+
+        SET @in_dec_qty = ROUND(@in_dec_qty, @Round);
+
         BEGIN TRANSACTION;
 
         -- กำหนด receive_date: ถ้าไม่ได้ส่งมาให้ใช้ GETDATE()
@@ -197,48 +202,9 @@ BEGIN
         -- ============================================================
         -- STEP 2: Insert Inventory Record ใหม่
         -- ============================================================
-        INSERT INTO [inv].[t_inv_inventory] (
-            warehouse_id,
-            warehouse,
-            owner_id,
-            owner_code,
-            location_id,
-            location,
-            item_master_id,
-            item_number,
-            item_description,
-            quantity,
-            inv_status,
-            lot_number,
-            expiry_date,
-            receive_date,
-            create_by,
-            create_date,
-            update_by,
-            update_date
-        )
-        VALUES (
-            @v_int_warehouse_id,
-            @v_vch_warehouse,
-            @v_int_owner_id,
-            @v_vch_owner_code,
-            @v_int_location_id,
-            @v_vch_location,
-            @v_int_item_master_id,
-            @v_vch_item_number,
-            @v_vch_item_description,
-            @in_dec_qty,
-            @in_vch_inv_status,
-            @in_vch_lot_number,
-            @in_dt_expiry_date,
-            @v_dt_receive_date,
-            @in_vch_user_id,
-            GETDATE(),
-            @in_vch_user_id,
-            GETDATE()
-        );
+        -- Check if existing inventory record exists
+        SET @v_int_inventory_id = NULL;
 
-        -- ดึง inventory_id ที่เพิ่งสร้าง
         SELECT TOP 1 @v_int_inventory_id = inventory_id
         FROM [inv].[t_inv_inventory]
         WHERE warehouse_id   = @v_int_warehouse_id
@@ -250,6 +216,65 @@ BEGIN
           AND ISNULL(expiry_date,  '') = ISNULL(@in_dt_expiry_date,  '')
           AND ISNULL(receive_date, '') = ISNULL(@v_dt_receive_date,  '')
         ORDER BY inventory_id DESC;
+
+        IF @v_int_inventory_id IS NOT NULL
+        BEGIN
+            -- Update existing record quantity
+            UPDATE [inv].[t_inv_inventory]
+            SET quantity         = ISNULL(quantity, 0) + @in_dec_qty,
+                update_by        = @in_vch_user_id,
+                update_date      = GETDATE()
+            WHERE inventory_id = @v_int_inventory_id;
+        END
+        ELSE
+        BEGIN
+            -- Get the newly created inventory_id from sequence
+            SET @v_int_inventory_id = NEXT VALUE FOR [inv].[SEQInventoryID];
+
+            -- Insert new record
+            INSERT INTO [inv].[t_inv_inventory] (
+                inventory_id,
+                warehouse_id,
+                warehouse,
+                owner_id,
+                owner_code,
+                location_id,
+                location,
+                item_master_id,
+                item_number,
+                item_description,
+                quantity,
+                inv_status,
+                lot_number,
+                expiry_date,
+                receive_date,
+                create_by,
+                create_date,
+                update_by,
+                update_date
+            )
+            VALUES (
+                @v_int_inventory_id,
+                @v_int_warehouse_id,
+                @v_vch_warehouse,
+                @v_int_owner_id,
+                @v_vch_owner_code,
+                @v_int_location_id,
+                @v_vch_location,
+                @v_int_item_master_id,
+                @v_vch_item_number,
+                @v_vch_item_description,
+                @in_dec_qty,
+                @in_vch_inv_status,
+                @in_vch_lot_number,
+                @in_dt_expiry_date,
+                @v_dt_receive_date,
+                @in_vch_user_id,
+                GETDATE(),
+                @in_vch_user_id,
+                GETDATE()
+            );
+        END
 
         -- ============================================================
         -- STEP 3: จัดการ Serial (ถ้า sn_control = 'FULL')

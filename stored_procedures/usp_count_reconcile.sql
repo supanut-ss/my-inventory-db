@@ -74,9 +74,14 @@ BEGIN
         @v_dec_quantity_stock       DECIMAL(18, 4),
         @v_dt_receive_date          DATE,
         @v_vch_expiry_date_str      NVARCHAR(50),
-        @v_dt_process_start         DATETIME = GETDATE();
+        @v_dt_process_start         DATETIME = GETDATE(),
+        @Round                      INT = 4;
 
     BEGIN TRY
+        SELECT TOP 1 @Round = value FROM inv.t_inv_rule WITH (NOLOCK) WHERE rule_code = 'DECIMAL_ROUNDING_RULE' AND is_active = 1;
+
+        SET @in_dec_quantity_count = ROUND(@in_dec_quantity_count, @Round);
+
         BEGIN TRANSACTION;
 
         -- ============================================================
@@ -242,16 +247,16 @@ BEGIN
         END
         ELSE
         BEGIN
-            -- ดึงจำนวน stock ปัจจุบันจาก inventory เพื่อเปรียบเทียบกับจำนวนที่นับได้
-            SELECT @v_dec_quantity_stock = ISNULL(quantity, 0)
-            FROM [inv].[t_inv_inventory]
-            WHERE warehouse_id     = @v_int_warehouse_id
-                AND owner_id       = @v_int_owner_id
-                AND location_id    = @in_int_location_id
-                AND item_master_id = @in_int_item_master_id
-            AND ISNULL(inv_status,  '') = ISNULL(@in_vch_inv_status, '')
-            AND ISNULL(lot_number,  '') = ISNULL(@in_vch_lot_number, '')
-            AND ISNULL(expiry_date, '') = ISNULL(@in_dt_expiry_date, '');
+              -- ดึงจำนวน stock ปัจจุบันจาก inventory เพื่อเปรียบเทียบกับจำนวนที่นับได้
+              SELECT @v_dec_quantity_stock = ROUND(ISNULL(SUM(quantity), 0), @Round)
+              FROM [inv].[t_inv_inventory]
+              WHERE warehouse_id     = @v_int_warehouse_id
+                  AND owner_id       = @v_int_owner_id
+                  AND location_id    = @in_int_location_id
+                  AND item_master_id = @in_int_item_master_id
+              AND ISNULL(inv_status,  '') = ISNULL(@in_vch_inv_status, '')
+              AND ISNULL(lot_number,  '') = ISNULL(@in_vch_lot_number, '')
+              AND ISNULL(expiry_date, '') = ISNULL(@in_dt_expiry_date, '');
 
             SET @v_dt_receive_date = CAST(GETDATE() AS DATE);
 

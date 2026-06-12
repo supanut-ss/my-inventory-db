@@ -94,9 +94,14 @@ BEGIN
         -- Serial
         @v_int_serial_count             INT,
         -- Process Tracking
-        @v_dt_process_start             DATETIME = GETDATE();
+        @v_dt_process_start             DATETIME = GETDATE(),
+        @Round                          INT = 4;
 
     BEGIN TRY
+        SELECT TOP 1 @Round = value FROM inv.t_inv_rule WITH (NOLOCK) WHERE rule_code = 'DECIMAL_ROUNDING_RULE' AND is_active = 1;
+
+        SET @in_dec_qty = ROUND(@in_dec_qty, @Round);
+
         BEGIN TRANSACTION;
 
         -- ============================================================
@@ -125,12 +130,16 @@ BEGIN
             SELECT TOP 1
                 @in_int_inventory_id = inventory_id
             FROM [inv].[t_inv_inventory]
-            WHERE item_number                           = ISNULL(@in_vch_item_number, item_number)
-              AND location                              = ISNULL(@in_vch_location, location)
-              AND ISNULL(lot_number,   '')              = ISNULL(@in_vch_lot_number,    '')
-              AND ISNULL(expiry_date,  '')              = ISNULL(@in_dt_expiry_date,   '')
-              AND ISNULL(inv_status,   '')              = ISNULL(@in_vch_inv_status,    '')
-            ORDER BY inventory_id ASC;
+            WHERE warehouse_id                        = @v_int_warehouse_id
+              AND owner_id                            = @v_int_owner_id
+              AND location                            = ISNULL(@in_vch_location, location)
+              AND ISNULL(item_number,   '')           = ISNULL(@in_vch_item_number,    '')
+              AND ISNULL(inv_status,   '')            = ISNULL(@in_vch_inv_status,     '')
+              AND ISNULL(lot_number,   '')            = ISNULL(@in_vch_lot_number,     '')
+              AND ISNULL(expiry_date,  '')            = ISNULL(@in_dt_expiry_date,    '')
+            ORDER BY
+                receive_date ASC,
+                inventory_id ASC;
         END
 
         -- ============================================================
