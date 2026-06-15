@@ -106,9 +106,34 @@ BEGIN
 
         -- ============================================================
         -- STEP 0: Auto-resolve inventory_id
-        --         ถ้าไม่ได้ส่ง inventory_id มา → ค้นหาจาก item_number + location + lot + expiry
+        --         ถ้าส่ง serial_number มา → ค้นหา inventory_id จาก serial_number (หากไม่พบให้ return error)
+        --         ถ้าไม่ได้ส่ง serial_number และไม่ได้ส่ง inventory_id มา → ค้นหาจาก item_number + location + lot + expiry
         -- ============================================================
-        IF @in_int_inventory_id IS NULL
+        IF @in_vch_serial_number IS NOT NULL AND @in_vch_serial_number <> ''
+        BEGIN
+            -- ค้นหา inventory_id จาก serial_number แทนการค้นหาจาก key
+            SELECT TOP 1
+                @in_int_inventory_id = inventory_id
+            FROM [inv].[t_inv_inventory_serial] WITH (NOLOCK)
+            WHERE serial_number = @in_vch_serial_number;
+
+            IF @in_int_inventory_id IS NULL
+            BEGIN
+                SET @out_vch_error_code    = 'ERR_SERIAL_NOT_FOUND';
+                SET @out_vch_error_message = [sec].usf_get_resouce_value('STORED_PROCEDURE', @out_vch_error_code, @in_vch_lang, '@param1', '@param2', '@param3', '@param4', '@param5');
+                
+                IF @out_vch_error_message IS NULL OR @out_vch_error_message = ''
+                BEGIN
+                    SET @out_vch_error_message = CASE 
+                        WHEN @in_vch_lang = 'TH' THEN N'ไม่พบ Serial Number ในรายการสินค้าคงคลังนี้' 
+                        ELSE 'Serial number not found in this inventory.' 
+                    END;
+                END
+
+                RAISERROR(@out_vch_error_message, 16, 1);
+            END
+        END
+        ELSE IF @in_int_inventory_id IS NULL
         BEGIN
             -- หา default warehouse (active, เก่าสุด)
             SELECT TOP 1
