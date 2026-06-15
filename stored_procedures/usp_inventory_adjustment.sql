@@ -32,6 +32,8 @@ ALTER PROCEDURE [inv].[usp_inventory_adjustment]
     -- ── 3. Lot & Expiry Control ───────────────────────────────
     @in_vch_lot_number              NVARCHAR(50)   = NULL,     -- Lot number (จำเป็นเมื่อ lot_control = 'FULL')
     @in_dt_expiry_date             DATE           = NULL,     -- Expiry date (จำเป็นเมื่อ expiry_date_control = 'FULL')
+    @in_vch_inv_status              NVARCHAR(50),              -- Inventory status (ใช้ค้นหา inventory)
+
 
     -- ── 4. Serial Control ─────────────────────────────────────
     @in_vch_serial_number           NVARCHAR(50)   = NULL,     -- Serial number (จำเป็นเมื่อ sn_control = 'FULL')
@@ -102,6 +104,7 @@ BEGIN
         SELECT TOP 1 @Round = value FROM inv.t_inv_rule WITH (NOLOCK) WHERE rule_code = 'DECIMAL_ROUNDING_RULE' AND is_active = 1;
 
         SET @in_dec_qty = ROUND(@in_dec_qty, @Round);
+        SET @v_vch_inv_status = @in_vch_inv_status;
 
         BEGIN TRANSACTION;
 
@@ -236,6 +239,8 @@ BEGIN
                 THEN 'ERR_QTY_EXCEEDS_AVAILABLE'            -- ADJUST_OUT เกิน qty คงเหลือ
             WHEN @in_vch_adj_type = 'ADJUST_OUT' AND @in_dec_qty > ISNULL(@v_dec_unallocated_qty, 0)
                 THEN 'ERR_QTY_ALLOCATED'                    -- ติด allocated
+            WHEN ISNULL(@in_vch_inv_status, '') = ''
+                THEN 'ERR_INV_STATUS_REQUIRED'              -- ไม่ได้ส่ง inv_status มา
             WHEN @v_vch_lot_control = 'FULL' AND ISNULL(@in_vch_lot_number, '') = ''
                 THEN 'ERR_LOT_REQUIRED'                     -- item ต้องการ lot แต่ไม่ได้ส่งมา
             WHEN @v_vch_lot_control = 'NONE' AND ISNULL(@in_vch_lot_number, '') <> ''
