@@ -38,7 +38,7 @@ CREATE OR ALTER PROCEDURE [inv].[usp_inventory_putaway]
     @in_vch_serial_number           NVARCHAR(50)   = NULL,     -- Serial number ที่ต้องการย้ายเฉพาะตัว (NULL = ย้ายทุก serial)
 
     -- ── 5. Operation-specific Parameters ─────────────────────
-    @in_dec_qty                     DECIMAL(18, 4),            -- จำนวนที่ต้องการย้าย (รองรับ partial put away)
+    @in_dec_qty                     DECIMAL(18, 5),            -- จำนวนที่ต้องการย้าย (รองรับ partial put away)
     @in_int_target_location_id      INT            = NULL,     -- Location ID ปลายทาง (NULL = resolve จาก @in_vch_target_location)
     @in_vch_target_location         NVARCHAR(50)   = NULL,     -- Location code ปลายทาง (ใช้เมื่อไม่มี target_location_id)
     @in_vch_tran_type               NVARCHAR(50)   = NULL,     -- Tran type สำหรับบันทึกลง tran_log (NULL/'' = PUT_AWAY)
@@ -85,8 +85,8 @@ BEGIN
         @v_int_item_uom_id              INT,
         @v_vch_uom                      NVARCHAR(10),
         -- Inventory Detail
-        @v_dec_source_qty               DECIMAL(18, 4),
-        @v_dec_source_unallocated_qty   DECIMAL(18, 4),
+        @v_dec_source_qty               DECIMAL(18, 5),
+        @v_dec_source_unallocated_qty   DECIMAL(18, 5),
         @v_vch_inv_status               NVARCHAR(50),
         @v_dt_receive_date              DATE,
         @v_vch_lot_number               NVARCHAR(50),

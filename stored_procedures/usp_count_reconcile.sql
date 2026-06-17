@@ -37,7 +37,7 @@ CREATE OR ALTER PROCEDURE [inv].[usp_count_reconcile]
     @in_vch_item_number         NVARCHAR(50)   = NULL,  -- Item number (ใช้เมื่อไม่มี item_master_id)
 
     -- ── 4. Operation-specific Parameters ─────────────────────
-    @in_dec_quantity_count      DECIMAL(18, 4),
+    @in_dec_quantity_count      DECIMAL(18, 5),
     @in_vch_inv_status          NVARCHAR(50)   = NULL,
     @in_vch_lot_number          NVARCHAR(50)   = NULL,
     @in_dt_expiry_date          DATE           = NULL,
@@ -71,7 +71,7 @@ BEGIN
         @v_vch_uom                  NVARCHAR(10),
         @v_int_count_detail_id      BIGINT,
         @v_int_count_reconcile_id   BIGINT,
-        @v_dec_quantity_stock       DECIMAL(18, 4),
+        @v_dec_quantity_stock       DECIMAL(18, 5),
         @v_dt_receive_date          DATE,
         @v_vch_expiry_date_str      NVARCHAR(50),
         @v_dt_process_start         DATETIME = GETDATE(),

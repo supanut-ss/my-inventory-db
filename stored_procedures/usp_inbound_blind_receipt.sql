@@ -18,7 +18,7 @@ ALTER PROCEDURE [inv].[usp_inbound_blind_receipt]
     @in_int_inbound_master_id     BIGINT        = NULL,  -- NULL = สร้าง inbound master ใหม่
     @in_int_item_master_id        INT,
     @in_int_input_uom_id          INT,
-    @in_dec_qty                   DECIMAL(18, 4),
+    @in_dec_qty                   DECIMAL(18, 5),
     @in_vch_lot_number            NVARCHAR(50)  = NULL,
     @in_dt_expiry_date           DATE          = NULL,
     @in_vch_serial_number         NVARCHAR(50)  = NULL,
@@ -47,11 +47,11 @@ BEGIN
         @v_vch_expiry_control       VARCHAR(10),
         @v_vch_sn_control           VARCHAR(10),
         @v_vch_input_uom            NVARCHAR(10),
-        @v_dec_conv_factor          DECIMAL(18, 6),
+        @v_dec_conv_factor          DECIMAL(18, 5),
         @v_bit_is_base_uom          BIT,
         @v_int_base_uom_id          INT,
         @v_vch_base_uom             NVARCHAR(10),
-        @v_dec_base_qty             DECIMAL(18, 4),
+        @v_dec_base_qty             DECIMAL(18, 5),
         @v_vch_order_status         VARCHAR(20),
         @v_vch_inbound_order_number NVARCHAR(50),
         @v_int_warehouse_id         INT,
@@ -67,7 +67,7 @@ BEGIN
         @v_int_receipt_header_id    BIGINT,
         @v_int_inbound_detail_id    BIGINT,
         @v_vch_receipt_number       NVARCHAR(50),
-        @v_int_max_line             INT,
+        @v_int_max_line             INT,0
         @v_vch_next_line_number     VARCHAR(10),
         @Round                      INT = 4;
     BEGIN TRY

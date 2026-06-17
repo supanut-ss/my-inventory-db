@@ -33,7 +33,7 @@ CREATE OR ALTER PROCEDURE [inv].[usp_inventory_adjustment_new_stock]
     @in_vch_serial_number           NVARCHAR(50)   = NULL,     -- Serial number (จำเป็นเมื่อ sn_control = 'FULL')
 
     -- ── 4. Operation-specific Parameters ─────────────────────
-    @in_dec_qty                     DECIMAL(18, 4),            -- จำนวนที่ต้องการเพิ่ม (ต้องมากกว่า 0)
+    @in_dec_qty                     DECIMAL(18, 5),            -- จำนวนที่ต้องการเพิ่ม (ต้องมากกว่า 0)
     @in_vch_inv_status              NVARCHAR(50),              -- สถานะ inventory (เช่น 'Available', 'Hold', 'Damaged')
     @in_dt_receive_date            DATE           = NULL,     -- วันที่รับสินค้า (NULL = ใช้ GETDATE())
 

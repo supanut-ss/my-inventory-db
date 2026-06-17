@@ -40,7 +40,7 @@ ALTER PROCEDURE [inv].[usp_inventory_adjustment]
 
     -- ── 5. Operation-specific Parameters ─────────────────────
     @in_vch_adj_type                VARCHAR(10),               -- ประเภทการปรับ: 'ADJUST_IN' (เพิ่ม) | 'ADJUST_OUT' (ลด)
-    @in_dec_qty                     DECIMAL(18, 4),            -- จำนวนที่ต้องการปรับ (ต้องมากกว่า 0)
+    @in_dec_qty                     DECIMAL(18, 5),            -- จำนวนที่ต้องการปรับ (ต้องมากกว่า 0)
 
     -- ── 6. Remark / Description ───────────────────────────────
     @in_vch_remark                  NVARCHAR(200)  = NULL,     -- หมายเหตุการปรับ (บันทึกใน tran_log)
@@ -79,14 +79,14 @@ BEGIN
         @v_int_item_uom_id              INT,
         @v_vch_uom                      NVARCHAR(10),
         -- Inventory Detail
-        @v_dec_current_qty              DECIMAL(18, 4),
-        @v_dec_available_qty            DECIMAL(18, 4),
-        @v_dec_unallocated_qty          DECIMAL(18, 4),
-        @v_dec_remaining_qty            DECIMAL(18, 4),
-        @v_dec_current_row_actual_qty   DECIMAL(18, 4),
-        @v_dec_adjust_qty               DECIMAL(18, 4),
+        @v_dec_current_qty              DECIMAL(18, 5),
+        @v_dec_available_qty            DECIMAL(18, 5),
+        @v_dec_unallocated_qty          DECIMAL(18, 5),
+        @v_dec_remaining_qty            DECIMAL(18, 5),
+        @v_dec_current_row_actual_qty   DECIMAL(18, 5),
+        @v_dec_adjust_qty               DECIMAL(18, 5),
         @v_int_current_inventory_id     BIGINT,
-        @v_dec_current_row_qty          DECIMAL(18, 4),
+        @v_dec_current_row_qty          DECIMAL(18, 5),
         @v_dt_current_receive_date     DATE,
         @v_vch_inv_status               NVARCHAR(50)  = 'Available',
         @v_dt_receive_date             DATE,
