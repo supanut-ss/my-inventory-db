@@ -609,6 +609,7 @@ BEGIN
         INSERT INTO [inv].[t_inv_tran_log] (
             tran_type,
             sub_tran_type,
+            description,
             warehouse_id,
             warehouse,
             owner_id,
@@ -642,6 +643,7 @@ BEGIN
         VALUES (
             'IO_RECEIPT',
             'RECEIPT',
+            CONCAT('Inbound receipt : ', @v_vch_inbound_order_number),
             @v_int_warehouse_id,
             @v_vch_warehouse,
             @v_int_owner_id,

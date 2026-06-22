@@ -67,7 +67,7 @@ BEGIN
         @v_int_receipt_header_id    BIGINT,
         @v_int_inbound_detail_id    BIGINT,
         @v_vch_receipt_number       NVARCHAR(50),
-        @v_int_max_line             INT,0
+        @v_int_max_line             INT = 0,
         @v_vch_next_line_number     VARCHAR(10),
         @Round                      INT = 4;
     BEGIN TRY
@@ -626,6 +626,7 @@ BEGIN
         INSERT INTO [inv].[t_inv_tran_log] (
             tran_type,
             sub_tran_type,
+            description,
             warehouse_id,
             warehouse,
             owner_id,
@@ -659,6 +660,7 @@ BEGIN
         VALUES (
             'IO_RECEIPT',
             'BLIND_RECEIPT',
+            CONCAT('Inbound blind receipt : ', @v_vch_inbound_order_number),
             @v_int_warehouse_id,
             @v_vch_warehouse,
             @v_int_owner_id,

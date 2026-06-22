@@ -411,6 +411,8 @@ BEGIN
             -- ประเภทธุรกรรมหลัก
             sub_tran_type,
             -- ประเภทธุรกรรมย่อย
+            description,
+            -- รายละเอียดธุรกรรม
             warehouse_id,
             warehouse,
             owner_id,
@@ -444,6 +446,7 @@ BEGIN
         VALUES (
             ISNULL(NULLIF(@in_vch_tran_type, ''), 'PUT_AWAY'),
             ISNULL(NULLIF(@in_vch_sub_tran_type, ''), 'PUT_AWAY'),
+            CONCAT('Inventory putaway - Move from ', @v_vch_source_location, ' to ', @v_vch_target_location),
             @v_int_warehouse_id,
             @v_vch_warehouse,
             @v_int_owner_id,
