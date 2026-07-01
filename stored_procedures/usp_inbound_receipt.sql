@@ -24,6 +24,7 @@ ALTER PROCEDURE [inv].[usp_inbound_receipt]
     @in_vch_user_id               NVARCHAR(50),
     @in_vch_device                NVARCHAR(50),
     @out_vch_inbound_order_number NVARCHAR(50)  OUTPUT,
+    @out_vch_next_focus           NVARCHAR(20)  OUTPUT,
     @out_vch_error_code           VARCHAR(50)   OUTPUT,
     @out_vch_error_message        NVARCHAR(255) OUTPUT
 AS
@@ -65,6 +66,10 @@ BEGIN
         @v_int_receipt_header_id      BIGINT,
         @v_vch_receipt_number         NVARCHAR(50),
         @v_vch_line_number            VARCHAR(10),
+        @v_dec_total_qty_order        DECIMAL(18, 5),
+        @v_dec_total_qty_received     DECIMAL(18, 5),
+        @v_dec_lot_expiry_qty_order   DECIMAL(18, 5),
+        @v_dec_lot_expiry_qty_received DECIMAL(18, 5),
         @Round                        INT = 4;
 
 
@@ -683,6 +688,163 @@ BEGIN
         SET @out_vch_error_code           = '0';
         -- ดึง success message จาก resource table (รองรับ multi-language)
         SET @out_vch_error_message        = [sec].usf_get_resouce_value('STORED_PROCEDURE','SAVE_SUCCESS',@in_vch_lang,'@param1','@param2','@param3','@param4','@param5');
+
+
+        -- ============================================================
+        -- คำนวณ next focus สำหรับ UI
+        -- ============================================================
+
+        -- รวม qty ทั้งหมดของ item นี้ใน master (ใช้ตัดสิน CLEAR)
+        SELECT
+            @v_dec_total_qty_order    = SUM(ISNULL(quantity_order,    0)),
+            @v_dec_total_qty_received = SUM(ISNULL(quantity_received, 0))
+        FROM [inv].[t_inv_inbound_detail]
+        WHERE inbound_master_id = @in_int_inbound_master_id
+          AND item_master_id    = @in_int_item_master_id;
+
+
+        -- ============================================================
+        -- CASE 1: Lot + Expired + SN
+        --   → group ตาม Lot+Expiry → เช็ค qty_received ครบหรือยัง
+        --   → ยังไม่ครบ group นี้              → 'SN'
+        --   → ครบ group นี้ + overall ไม่ครบ   → 'LOT'
+        --   → overall ครบแล้ว                  → 'CLEAR'
+        -- ============================================================
+        IF @v_vch_lot_control = 'FULL' AND @v_vch_expiry_control = 'FULL' AND @v_vch_sn_control = 'FULL'
+        BEGIN
+            SELECT
+                @v_dec_lot_expiry_qty_order    = SUM(ISNULL(quantity_order,    0)),
+                @v_dec_lot_expiry_qty_received = SUM(ISNULL(quantity_received, 0))
+            FROM [inv].[t_inv_inbound_detail]
+            WHERE inbound_master_id                 = @in_int_inbound_master_id
+              AND item_master_id                    = @in_int_item_master_id
+              AND ISNULL(lot_number,  '')           = ISNULL(@in_vch_lot_number,  '')
+              AND ISNULL(expiry_date, '') = ISNULL(@in_dt_expiry_date,  '');
+
+            IF ISNULL(@v_dec_lot_expiry_qty_received, 0) < ISNULL(@v_dec_lot_expiry_qty_order, 0)
+                SET @out_vch_next_focus = 'SN';
+            ELSE IF ISNULL(@v_dec_total_qty_received, 0) >= ISNULL(@v_dec_total_qty_order, 0)
+                SET @out_vch_next_focus = 'CLEAR';
+            ELSE
+                SET @out_vch_next_focus = 'LOT';
+        END
+
+
+        -- ============================================================
+        -- CASE 2: Lot + Expired (ไม่มี SN)
+        --   → overall ครบ → 'CLEAR', ยังไม่ครบ → 'LOT'
+        -- ============================================================
+        ELSE IF @v_vch_lot_control = 'FULL' AND @v_vch_expiry_control = 'FULL'
+        BEGIN
+            IF ISNULL(@v_dec_total_qty_received, 0) >= ISNULL(@v_dec_total_qty_order, 0)
+                SET @out_vch_next_focus = 'CLEAR';
+            ELSE
+                SET @out_vch_next_focus = 'LOT';
+        END
+
+
+        -- ============================================================
+        -- CASE 3: Lot + SN (ไม่มี Expired)
+        --   → group ตาม Lot → เช็ค qty_received ครบหรือยัง
+        --   → ยังไม่ครบ Lot นี้               → 'SN'
+        --   → ครบ Lot นี้ + overall ไม่ครบ    → 'LOT'
+        --   → overall ครบแล้ว                 → 'CLEAR'
+        -- ============================================================
+        ELSE IF @v_vch_lot_control = 'FULL' AND @v_vch_sn_control = 'FULL'
+        BEGIN
+            SELECT
+                @v_dec_lot_expiry_qty_order    = SUM(ISNULL(quantity_order,    0)),
+                @v_dec_lot_expiry_qty_received = SUM(ISNULL(quantity_received, 0))
+            FROM [inv].[t_inv_inbound_detail]
+            WHERE inbound_master_id      = @in_int_inbound_master_id
+              AND item_master_id         = @in_int_item_master_id
+              AND ISNULL(lot_number, '') = ISNULL(@in_vch_lot_number, '');
+
+            IF ISNULL(@v_dec_lot_expiry_qty_received, 0) < ISNULL(@v_dec_lot_expiry_qty_order, 0)
+                SET @out_vch_next_focus = 'SN';
+            ELSE IF ISNULL(@v_dec_total_qty_received, 0) >= ISNULL(@v_dec_total_qty_order, 0)
+                SET @out_vch_next_focus = 'CLEAR';
+            ELSE
+                SET @out_vch_next_focus = 'LOT';
+        END
+
+
+        -- ============================================================
+        -- CASE 4: Expired + SN (ไม่มี Lot)
+        --   → group ตาม Expiry → เช็ค qty_received ครบหรือยัง
+        --   → ยังไม่ครบ Expiry นี้             → 'SN'
+        --   → ครบ Expiry นี้ + overall ไม่ครบ  → 'EXPIRED'
+        --   → overall ครบแล้ว                  → 'CLEAR'
+        -- ============================================================
+        ELSE IF @v_vch_expiry_control = 'FULL' AND @v_vch_sn_control = 'FULL'
+        BEGIN
+            SELECT
+                @v_dec_lot_expiry_qty_order    = SUM(ISNULL(quantity_order,    0)),
+                @v_dec_lot_expiry_qty_received = SUM(ISNULL(quantity_received, 0))
+            FROM [inv].[t_inv_inbound_detail]
+            WHERE inbound_master_id                 = @in_int_inbound_master_id
+              AND item_master_id                    = @in_int_item_master_id
+              AND ISNULL(expiry_date, '') = ISNULL(@in_dt_expiry_date, '');
+
+            IF ISNULL(@v_dec_lot_expiry_qty_received, 0) < ISNULL(@v_dec_lot_expiry_qty_order, 0)
+                SET @out_vch_next_focus = 'SN';
+            ELSE IF ISNULL(@v_dec_total_qty_received, 0) >= ISNULL(@v_dec_total_qty_order, 0)
+                SET @out_vch_next_focus = 'CLEAR';
+            ELSE
+                SET @out_vch_next_focus = 'EXPIRED';
+        END
+
+
+        -- ============================================================
+        -- CASE 5: Lot เท่านั้น
+        --   → overall ครบ → 'CLEAR', ยังไม่ครบ → 'LOT'
+        -- ============================================================
+        ELSE IF @v_vch_lot_control = 'FULL'
+        BEGIN
+            IF ISNULL(@v_dec_total_qty_received, 0) >= ISNULL(@v_dec_total_qty_order, 0)
+                SET @out_vch_next_focus = 'CLEAR';
+            ELSE
+                SET @out_vch_next_focus = 'LOT';
+        END
+
+
+        -- ============================================================
+        -- CASE 6: Expired เท่านั้น
+        --   → overall ครบ → 'CLEAR', ยังไม่ครบ → 'EXPIRED'
+        -- ============================================================
+        ELSE IF @v_vch_expiry_control = 'FULL'
+        BEGIN
+            IF ISNULL(@v_dec_total_qty_received, 0) >= ISNULL(@v_dec_total_qty_order, 0)
+                SET @out_vch_next_focus = 'CLEAR';
+            ELSE
+                SET @out_vch_next_focus = 'EXPIRED';
+        END
+
+
+        -- ============================================================
+        -- CASE 7: SN เท่านั้น
+        --   → overall ครบ → 'CLEAR', ยังไม่ครบ → 'SN'
+        -- ============================================================
+        ELSE IF @v_vch_sn_control = 'FULL'
+        BEGIN
+            IF ISNULL(@v_dec_total_qty_received, 0) >= ISNULL(@v_dec_total_qty_order, 0)
+                SET @out_vch_next_focus = 'CLEAR';
+            ELSE
+                SET @out_vch_next_focus = 'SN';
+        END
+
+
+        -- ============================================================
+        -- ไม่มี control ใดเลย
+        --   → overall ครบ → 'CLEAR', ยังไม่ครบ → 'QTY'
+        -- ============================================================
+        ELSE
+        BEGIN
+            IF ISNULL(@v_dec_total_qty_received, 0) >= ISNULL(@v_dec_total_qty_order, 0)
+                SET @out_vch_next_focus = 'CLEAR';
+            ELSE
+                SET @out_vch_next_focus = 'QTY';
+        END
 
 
     END TRY
