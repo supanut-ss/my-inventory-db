@@ -718,8 +718,14 @@ BEGIN
             FROM [inv].[t_inv_inbound_detail]
             WHERE inbound_master_id                 = @in_int_inbound_master_id
               AND item_master_id                    = @in_int_item_master_id
-              AND ISNULL(lot_number,  '')           = ISNULL(@in_vch_lot_number,  '')
-              AND ISNULL(expiry_date, '') = ISNULL(@in_dt_expiry_date,  '');
+              AND (
+                  ISNULL(lot_number,  '')           = ISNULL(@in_vch_lot_number,  '')
+                  OR (ISNULL(lot_number, '') = '' AND inbound_detail_id = @in_int_inbound_detail_id)
+              )
+              AND (
+                  ISNULL(expiry_date, '')           = ISNULL(@in_dt_expiry_date,  '')
+                  OR (expiry_date IS NULL AND inbound_detail_id = @in_int_inbound_detail_id)
+              );
 
             IF ISNULL(@v_dec_lot_expiry_qty_received, 0) < ISNULL(@v_dec_lot_expiry_qty_order, 0)
                 SET @out_vch_next_focus = 'SN';
@@ -758,7 +764,10 @@ BEGIN
             FROM [inv].[t_inv_inbound_detail]
             WHERE inbound_master_id      = @in_int_inbound_master_id
               AND item_master_id         = @in_int_item_master_id
-              AND ISNULL(lot_number, '') = ISNULL(@in_vch_lot_number, '');
+              AND (
+                  ISNULL(lot_number, '') = ISNULL(@in_vch_lot_number, '')
+                  OR (ISNULL(lot_number, '') = '' AND inbound_detail_id = @in_int_inbound_detail_id)
+              );
 
             IF ISNULL(@v_dec_lot_expiry_qty_received, 0) < ISNULL(@v_dec_lot_expiry_qty_order, 0)
                 SET @out_vch_next_focus = 'SN';
@@ -784,7 +793,10 @@ BEGIN
             FROM [inv].[t_inv_inbound_detail]
             WHERE inbound_master_id                 = @in_int_inbound_master_id
               AND item_master_id                    = @in_int_item_master_id
-              AND ISNULL(expiry_date, '') = ISNULL(@in_dt_expiry_date, '');
+              AND (
+                  ISNULL(expiry_date, '')           = ISNULL(@in_dt_expiry_date,  '')
+                  OR (expiry_date IS NULL AND inbound_detail_id = @in_int_inbound_detail_id)
+              );
 
             IF ISNULL(@v_dec_lot_expiry_qty_received, 0) < ISNULL(@v_dec_lot_expiry_qty_order, 0)
                 SET @out_vch_next_focus = 'SN';

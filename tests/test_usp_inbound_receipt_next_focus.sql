@@ -28,6 +28,9 @@ GO
 --      |                     | overall ครบ                  -> CLEAR
 --   8  | No Control          | overall ไม่ครบ               -> QTY
 --      |                     | overall ครบ                  -> CLEAR
+--   9  | Lot+Expired+SN (Null Plan) | SN ยังไม่ครบ -> SN, ครบ -> CLEAR
+--  10  | Lot+SN (Null Plan)  | SN ยังไม่ครบ -> SN, ครบ -> CLEAR
+--  11  | Expired+SN (Null Plan) | SN ยังไม่ครบ -> SN, ครบ -> CLEAR
 --
 -- ** ทุกอย่าง ROLLBACK ท้าย script ไม่กระทบ production data **
 -- ============================================================
@@ -874,6 +877,282 @@ BEGIN TRY
             @out_vch_error_message        = @o_msg    OUTPUT;
         INSERT INTO @results (case_name, step_desc, expected, actual, err_code)
         VALUES ('Case 8: No Control', '8b: receive 10 remaining (20/20) -> CLEAR', 'CLEAR', @o_focus, @o_code);
+    END
+
+
+    -- ============================================================
+    -- CASE 9: Lot + Expired + SN (Plan has NULL Lot & Expiry)
+    -- ============================================================
+    SET @skipped = 0;
+    SET @item_id = NULL; SET @uom = NULL;
+
+    SELECT TOP 1
+        @item_id = i.item_master_id,
+        @uom     = u.uom
+    FROM [inv].[t_inv_item] i
+    INNER JOIN [inv].[t_inv_item_uom] u
+        ON i.item_master_id = u.item_master_id AND u.primary_uom = 1
+    WHERE i.lot_control         = 'Full'
+      AND i.expiry_date_control = 'Full'
+      AND i.sn_control          = 'Full'
+    ORDER BY i.item_master_id;
+
+    IF @item_id IS NULL
+    BEGIN
+        INSERT INTO @results (case_name, step_desc, expected, actual, err_code)
+        VALUES ('Case 9: Lot+Expired+SN (Null Plan)', '-- SKIPPED: ไม่พบ item ที่ Lot=Full, Exp=Full, SN=Full --', 'N/A', 'N/A', 'SKIP');
+        SET @skipped = 1;
+    END
+
+    IF @skipped = 0
+    BEGIN
+        SET @master_id = NEXT VALUE FOR [inv].[SEQInboundID];
+        INSERT INTO [inv].[t_inv_inbound_master]
+            (inbound_master_id, inbound_order_number, warehouse_id, warehouse, owner_id, owner_code,
+             order_type, order_status, order_date, create_by, create_date)
+        VALUES (@master_id, CONCAT('TEST-C9-', @master_id), @wh_id, @wh, @owner_id, @owner,
+                @ord_type, 'Receiving', GETDATE(), @USER, GETDATE());
+
+        -- Detail A: NULL lot/expiry qty=2
+        SET @detail_id = NEXT VALUE FOR [inv].[SEQInboundID];
+        INSERT INTO [inv].[t_inv_inbound_detail]
+            (inbound_detail_id, inbound_master_id, inbound_order_number, line_number, item_master_id,
+             item_number, item_description, item_uom_id, uom, quantity_order, quantity_received,
+             inv_status, lot_number, expiry_date, serial_number, create_by, create_date)
+        SELECT @detail_id, @master_id, CONCAT('TEST-C9-', @master_id), '00001', i.item_master_id,
+               i.item_number, i.description, u.item_uom_id, u.uom, 2, 0,
+               'Available', NULL, NULL, NULL, @USER, GETDATE()
+        FROM [inv].[t_inv_item] i
+        JOIN [inv].[t_inv_item_uom] u ON i.item_master_id = u.item_master_id AND u.primary_uom = 1
+        WHERE i.item_master_id = @item_id;
+
+        -- Step 9a: SN-T001 (LOT-TEST group 1/2) -> SN
+        SET @o_focus = NULL; SET @o_code = NULL;
+        EXEC [inv].[usp_inbound_receipt]
+            @in_int_inbound_master_id     = @master_id,
+            @in_int_inbound_detail_id     = @detail_id,
+            @in_int_item_master_id        = @item_id,
+            @in_vch_uom                   = @uom,
+            @in_dec_qty                   = 1,
+            @in_vch_lot_number            = 'LOT-TEST',
+            @in_dt_expiry_date            = '2026-12-31',
+            @in_vch_serial_number         = 'SN-T001',
+            @in_int_receipt_location_id   = @loc_id,
+            @in_vch_lang                  = @LANG,
+            @in_vch_user_id               = @USER,
+            @in_vch_device                = @DEVICE,
+            @out_vch_inbound_order_number = @o_order OUTPUT,
+            @out_vch_next_focus           = @o_focus  OUTPUT,
+            @out_vch_error_code           = @o_code   OUTPUT,
+            @out_vch_error_message        = @o_msg    OUTPUT;
+        INSERT INTO @results (case_name, step_desc, expected, actual, err_code)
+        VALUES ('Case 9: Lot+Expired+SN (Null Plan)', '9a: SN-T001 -> LOT-TEST (1/2, expected SN)', 'SN', @o_focus, @o_code);
+
+        -- Step 9b: SN-T002 (LOT-TEST group 2/2) -> CLEAR
+        SET @o_focus = NULL; SET @o_code = NULL;
+        EXEC [inv].[usp_inbound_receipt]
+            @in_int_inbound_master_id     = @master_id,
+            @in_int_inbound_detail_id     = @detail_id,
+            @in_int_item_master_id        = @item_id,
+            @in_vch_uom                   = @uom,
+            @in_dec_qty                   = 1,
+            @in_vch_lot_number            = 'LOT-TEST',
+            @in_dt_expiry_date            = '2026-12-31',
+            @in_vch_serial_number         = 'SN-T002',
+            @in_int_receipt_location_id   = @loc_id,
+            @in_vch_lang                  = @LANG,
+            @in_vch_user_id               = @USER,
+            @in_vch_device                = @DEVICE,
+            @out_vch_inbound_order_number = @o_order OUTPUT,
+            @out_vch_next_focus           = @o_focus  OUTPUT,
+            @out_vch_error_code           = @o_code   OUTPUT,
+            @out_vch_error_message        = @o_msg    OUTPUT;
+        INSERT INTO @results (case_name, step_desc, expected, actual, err_code)
+        VALUES ('Case 9: Lot+Expired+SN (Null Plan)', '9b: SN-T002 -> LOT-TEST (2/2, expected CLEAR)', 'CLEAR', @o_focus, @o_code);
+    END
+
+
+    -- ============================================================
+    -- CASE 10: Lot + SN (Plan has NULL Lot)
+    -- ============================================================
+    SET @skipped = 0;
+    SET @item_id = NULL; SET @uom = NULL;
+
+    SELECT TOP 1
+        @item_id = i.item_master_id,
+        @uom     = u.uom
+    FROM [inv].[t_inv_item] i
+    INNER JOIN [inv].[t_inv_item_uom] u
+        ON i.item_master_id = u.item_master_id AND u.primary_uom = 1
+    WHERE i.lot_control          = 'Full'
+      AND i.expiry_date_control != 'Full'
+      AND i.sn_control           = 'Full'
+    ORDER BY i.item_master_id;
+
+    IF @item_id IS NULL
+    BEGIN
+        INSERT INTO @results (case_name, step_desc, expected, actual, err_code)
+        VALUES ('Case 10: Lot+SN (Null Plan)', '-- SKIPPED: ไม่พบ item ที่ Lot=Full, Exp!=Full, SN=Full --', 'N/A', 'N/A', 'SKIP');
+        SET @skipped = 1;
+    END
+
+    IF @skipped = 0
+    BEGIN
+        SET @master_id = NEXT VALUE FOR [inv].[SEQInboundID];
+        INSERT INTO [inv].[t_inv_inbound_master]
+            (inbound_master_id, inbound_order_number, warehouse_id, warehouse, owner_id, owner_code,
+             order_type, order_status, order_date, create_by, create_date)
+        VALUES (@master_id, CONCAT('TEST-C10-', @master_id), @wh_id, @wh, @owner_id, @owner,
+                @ord_type, 'Receiving', GETDATE(), @USER, GETDATE());
+
+        -- Detail A: NULL lot qty=2
+        SET @detail_id = NEXT VALUE FOR [inv].[SEQInboundID];
+        INSERT INTO [inv].[t_inv_inbound_detail]
+            (inbound_detail_id, inbound_master_id, inbound_order_number, line_number, item_master_id,
+             item_number, item_description, item_uom_id, uom, quantity_order, quantity_received,
+             inv_status, lot_number, expiry_date, serial_number, create_by, create_date)
+        SELECT @detail_id, @master_id, CONCAT('TEST-C10-', @master_id), '00001', i.item_master_id,
+               i.item_number, i.description, u.item_uom_id, u.uom, 2, 0,
+               'Available', NULL, NULL, NULL, @USER, GETDATE()
+        FROM [inv].[t_inv_item] i
+        JOIN [inv].[t_inv_item_uom] u ON i.item_master_id = u.item_master_id AND u.primary_uom = 1
+        WHERE i.item_master_id = @item_id;
+
+        -- Step 10a: SN-U001 (LOT-TEST-10 1/2) -> SN
+        SET @o_focus = NULL; SET @o_code = NULL;
+        EXEC [inv].[usp_inbound_receipt]
+            @in_int_inbound_master_id     = @master_id,
+            @in_int_inbound_detail_id     = @detail_id,
+            @in_int_item_master_id        = @item_id,
+            @in_vch_uom                   = @uom,
+            @in_dec_qty                   = 1,
+            @in_vch_lot_number            = 'LOT-TEST-10',
+            @in_dt_expiry_date            = NULL,
+            @in_vch_serial_number         = 'SN-U001',
+            @in_int_receipt_location_id   = @loc_id,
+            @in_vch_lang                  = @LANG,
+            @in_vch_user_id               = @USER,
+            @in_vch_device                = @DEVICE,
+            @out_vch_inbound_order_number = @o_order OUTPUT,
+            @out_vch_next_focus           = @o_focus  OUTPUT,
+            @out_vch_error_code           = @o_code   OUTPUT,
+            @out_vch_error_message        = @o_msg    OUTPUT;
+        INSERT INTO @results (case_name, step_desc, expected, actual, err_code)
+        VALUES ('Case 10: Lot+SN (Null Plan)', '10a: SN-U001 -> LOT-TEST-10 (1/2, expected SN)', 'SN', @o_focus, @o_code);
+
+        -- Step 10b: SN-U002 (LOT-TEST-10 2/2) -> CLEAR
+        SET @o_focus = NULL; SET @o_code = NULL;
+        EXEC [inv].[usp_inbound_receipt]
+            @in_int_inbound_master_id     = @master_id,
+            @in_int_inbound_detail_id     = @detail_id,
+            @in_int_item_master_id        = @item_id,
+            @in_vch_uom                   = @uom,
+            @in_dec_qty                   = 1,
+            @in_vch_lot_number            = 'LOT-TEST-10',
+            @in_dt_expiry_date            = NULL,
+            @in_vch_serial_number         = 'SN-U002',
+            @in_int_receipt_location_id   = @loc_id,
+            @in_vch_lang                  = @LANG,
+            @in_vch_user_id               = @USER,
+            @in_vch_device                = @DEVICE,
+            @out_vch_inbound_order_number = @o_order OUTPUT,
+            @out_vch_next_focus           = @o_focus  OUTPUT,
+            @out_vch_error_code           = @o_code   OUTPUT,
+            @out_vch_error_message        = @o_msg    OUTPUT;
+        INSERT INTO @results (case_name, step_desc, expected, actual, err_code)
+        VALUES ('Case 10: Lot+SN (Null Plan)', '10b: SN-U002 -> LOT-TEST-10 (2/2, expected CLEAR)', 'CLEAR', @o_focus, @o_code);
+    END
+
+
+    -- ============================================================
+    -- CASE 11: Expired + SN (Plan has NULL Expiry)
+    -- ============================================================
+    SET @skipped = 0;
+    SET @item_id = NULL; SET @uom = NULL;
+
+    SELECT TOP 1
+        @item_id = i.item_master_id,
+        @uom     = u.uom
+    FROM [inv].[t_inv_item] i
+    INNER JOIN [inv].[t_inv_item_uom] u
+        ON i.item_master_id = u.item_master_id AND u.primary_uom = 1
+    WHERE i.lot_control         != 'Full'
+      AND i.expiry_date_control  = 'Full'
+      AND i.sn_control           = 'Full'
+    ORDER BY i.item_master_id;
+
+    IF @item_id IS NULL
+    BEGIN
+        INSERT INTO @results (case_name, step_desc, expected, actual, err_code)
+        VALUES ('Case 11: Expired+SN (Null Plan)', '-- SKIPPED: ไม่พบ item ที่ Lot!=Full, Exp=Full, SN=Full --', 'N/A', 'N/A', 'SKIP');
+        SET @skipped = 1;
+    END
+
+    IF @skipped = 0
+    BEGIN
+        SET @master_id = NEXT VALUE FOR [inv].[SEQInboundID];
+        INSERT INTO [inv].[t_inv_inbound_master]
+            (inbound_master_id, inbound_order_number, warehouse_id, warehouse, owner_id, owner_code,
+             order_type, order_status, order_date, create_by, create_date)
+        VALUES (@master_id, CONCAT('TEST-C11-', @master_id), @wh_id, @wh, @owner_id, @owner,
+                @ord_type, 'Receiving', GETDATE(), @USER, GETDATE());
+
+        -- Detail A: NULL expiry qty=2
+        SET @detail_id = NEXT VALUE FOR [inv].[SEQInboundID];
+        INSERT INTO [inv].[t_inv_inbound_detail]
+            (inbound_detail_id, inbound_master_id, inbound_order_number, line_number, item_master_id,
+             item_number, item_description, item_uom_id, uom, quantity_order, quantity_received,
+             inv_status, lot_number, expiry_date, serial_number, create_by, create_date)
+        SELECT @detail_id, @master_id, CONCAT('TEST-C11-', @master_id), '00001', i.item_master_id,
+               i.item_number, i.description, u.item_uom_id, u.uom, 2, 0,
+               'Available', NULL, NULL, NULL, @USER, GETDATE()
+        FROM [inv].[t_inv_item] i
+        JOIN [inv].[t_inv_item_uom] u ON i.item_master_id = u.item_master_id AND u.primary_uom = 1
+        WHERE i.item_master_id = @item_id;
+
+        -- Step 11a: SN-V001 (Exp 2026-12-31 1/2) -> SN
+        SET @o_focus = NULL; SET @o_code = NULL;
+        EXEC [inv].[usp_inbound_receipt]
+            @in_int_inbound_master_id     = @master_id,
+            @in_int_inbound_detail_id     = @detail_id,
+            @in_int_item_master_id        = @item_id,
+            @in_vch_uom                   = @uom,
+            @in_dec_qty                   = 1,
+            @in_vch_lot_number            = NULL,
+            @in_dt_expiry_date            = '2026-12-31',
+            @in_vch_serial_number         = 'SN-V001',
+            @in_int_receipt_location_id   = @loc_id,
+            @in_vch_lang                  = @LANG,
+            @in_vch_user_id               = @USER,
+            @in_vch_device                = @DEVICE,
+            @out_vch_inbound_order_number = @o_order OUTPUT,
+            @out_vch_next_focus           = @o_focus  OUTPUT,
+            @out_vch_error_code           = @o_code   OUTPUT,
+            @out_vch_error_message        = @o_msg    OUTPUT;
+        INSERT INTO @results (case_name, step_desc, expected, actual, err_code)
+        VALUES ('Case 11: Expired+SN (Null Plan)', '11a: SN-V001 -> Exp 2026-12-31 (1/2, expected SN)', 'SN', @o_focus, @o_code);
+
+        -- Step 11b: SN-V002 (Exp 2026-12-31 2/2) -> CLEAR
+        SET @o_focus = NULL; SET @o_code = NULL;
+        EXEC [inv].[usp_inbound_receipt]
+            @in_int_inbound_master_id     = @master_id,
+            @in_int_inbound_detail_id     = @detail_id,
+            @in_int_item_master_id        = @item_id,
+            @in_vch_uom                   = @uom,
+            @in_dec_qty                   = 1,
+            @in_vch_lot_number            = NULL,
+            @in_dt_expiry_date            = '2026-12-31',
+            @in_vch_serial_number         = 'SN-V002',
+            @in_int_receipt_location_id   = @loc_id,
+            @in_vch_lang                  = @LANG,
+            @in_vch_user_id               = @USER,
+            @in_vch_device                = @DEVICE,
+            @out_vch_inbound_order_number = @o_order OUTPUT,
+            @out_vch_next_focus           = @o_focus  OUTPUT,
+            @out_vch_error_code           = @o_code   OUTPUT,
+            @out_vch_error_message        = @o_msg    OUTPUT;
+        INSERT INTO @results (case_name, step_desc, expected, actual, err_code)
+        VALUES ('Case 11: Expired+SN (Null Plan)', '11b: SN-V002 -> Exp 2026-12-31 (2/2, expected CLEAR)', 'CLEAR', @o_focus, @o_code);
     END
 
 
